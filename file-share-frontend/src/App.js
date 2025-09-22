@@ -1,23 +1,37 @@
-import logo from './logo.svg';
-import './App.css';
+import React, { useState } from "react";
 
 function App() {
+  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+
+  const handleFileChange = (e) => {
+    setFile(e.target.files[0]);
+  };
+
+  const handleUpload = () => {
+    if (!file) return;
+    // For now, just add file to list (fake upload)
+    setFiles([...files, { name: file.name, size: file.size }]);
+    setFile(null);
+  };
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div style={{ padding: 20 }}>
+      <h2>📤 File Sharing (Frontend Only)</h2>
+
+      <input type="file" onChange={handleFileChange} />
+      <button onClick={handleUpload} disabled={!file}>
+        Upload
+      </button>
+
+      <h3>📂 Files</h3>
+      <ul>
+        {files.map((f, i) => (
+          <li key={i}>
+            {f.name} ({(f.size / 1024).toFixed(1)} KB)
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
