@@ -10,13 +10,20 @@ function App() {
 
   const handleUpload = () => {
     if (!file) return;
-    // For now, just add file to list (fake upload)
-    setFiles([...files, { name: file.name, size: file.size }]);
+
+    // Create a preview URL
+    const previewUrl = URL.createObjectURL(file);
+
+    setFiles([
+      ...files,
+      { name: file.name, size: file.size, type: file.type, preview: previewUrl },
+    ]);
+
     setFile(null);
   };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h2>📤 File Sharing (Frontend Only)</h2>
 
       <input type="file" onChange={handleFileChange} />
@@ -25,10 +32,35 @@ function App() {
       </button>
 
       <h3>📂 Files</h3>
-      <ul>
+      <ul style={{ listStyle: "none", padding: 0 }}>
         {files.map((f, i) => (
-          <li key={i}>
-            {f.name} ({(f.size / 1024).toFixed(1)} KB)
+          <li key={i} style={{ marginBottom: 20 }}>
+            <p>
+              <strong>{f.name}</strong> ({(f.size / 1024).toFixed(1)} KB)
+            </p>
+
+            {/* Show previews depending on file type */}
+            {f.type.startsWith("image/") && (
+              <img
+                src={f.preview}
+                alt={f.name}
+                style={{ width: 150, border: "1px solid #ccc", borderRadius: 8 }}
+              />
+            )}
+
+            {f.type === "application/pdf" && (
+              <iframe
+                src={f.preview}
+                title={f.name}
+                style={{ width: "300px", height: "200px", border: "1px solid #ccc" }}
+              />
+            )}
+
+            {!f.type.startsWith("image/") && f.type !== "application/pdf" && (
+              <a href={f.preview} download={f.name}>
+                Download {f.name}
+              </a>
+            )}
           </li>
         ))}
       </ul>
