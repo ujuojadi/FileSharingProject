@@ -14,10 +14,28 @@ function App() {
     // Create a preview URL
     const previewUrl = URL.createObjectURL(file);
 
-    setFiles([
-      ...files,
-      { name: file.name, size: file.size, type: file.type, preview: previewUrl },
-    ]);
+    // Add file with 0% progress
+    const newFile = {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      preview: previewUrl,
+      progress: 0,
+    };
+
+    setFiles((prev) => [...prev, newFile]);
+
+    // Simulate upload progress
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.name === newFile.name ? { ...f, progress } : f
+        )
+      );
+      if (progress >= 100) clearInterval(interval);
+    }, 200);
 
     setFile(null);
   };
@@ -38,6 +56,28 @@ function App() {
             <p>
               <strong>{f.name}</strong> ({(f.size / 1024).toFixed(1)} KB)
             </p>
+
+            {/* Progress bar */}
+            <div
+              style={{
+                width: "300px",
+                height: "10px",
+                background: "#eee",
+                borderRadius: "5px",
+                overflow: "hidden",
+                marginBottom: "10px",
+              }}
+            >
+              <div
+                style={{
+                  width: `${f.progress}%`,
+                  height: "100%",
+                  background: f.progress < 100 ? "#2196f3" : "green",
+                  transition: "width 0.2s ease",
+                }}
+              ></div>
+            </div>
+            <p>{f.progress}%</p>
 
             {/* Show previews depending on file type */}
             {f.type.startsWith("image/") && (
