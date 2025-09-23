@@ -16,6 +16,7 @@ function App() {
 
     // Add file with 0% progress
     const newFile = {
+      id: Date.now(), // unique id for tracking
       name: file.name,
       size: file.size,
       type: file.type,
@@ -31,13 +32,17 @@ function App() {
       progress += 10;
       setFiles((prev) =>
         prev.map((f) =>
-          f.name === newFile.name ? { ...f, progress } : f
+          f.id === newFile.id ? { ...f, progress } : f
         )
       );
       if (progress >= 100) clearInterval(interval);
     }, 200);
 
     setFile(null);
+  };
+
+  const handleDelete = (id) => {
+    setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
   return (
@@ -51,8 +56,8 @@ function App() {
 
       <h3>📂 Files</h3>
       <ul style={{ listStyle: "none", padding: 0 }}>
-        {files.map((f, i) => (
-          <li key={i} style={{ marginBottom: 20 }}>
+        {files.map((f) => (
+          <li key={f.id} style={{ marginBottom: 20 }}>
             <p>
               <strong>{f.name}</strong> ({(f.size / 1024).toFixed(1)} KB)
             </p>
@@ -101,6 +106,23 @@ function App() {
                 Download {f.name}
               </a>
             )}
+
+            {/* Delete button */}
+            <br />
+            <button
+              onClick={() => handleDelete(f.id)}
+              style={{
+                marginTop: 10,
+                padding: "5px 10px",
+                background: "red",
+                color: "white",
+                border: "none",
+                borderRadius: 5,
+                cursor: "pointer",
+              }}
+            >
+              ❌ Delete
+            </button>
           </li>
         ))}
       </ul>
