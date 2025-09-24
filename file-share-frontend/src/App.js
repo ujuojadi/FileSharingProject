@@ -11,12 +11,10 @@ function App() {
   const handleUpload = () => {
     if (!file) return;
 
-    // Create a preview URL
     const previewUrl = URL.createObjectURL(file);
 
-    // Add file with 0% progress
     const newFile = {
-      id: Date.now(), // unique id for tracking
+      id: Date.now(),
       name: file.name,
       size: file.size,
       type: file.type,
@@ -26,14 +24,11 @@ function App() {
 
     setFiles((prev) => [...prev, newFile]);
 
-    // Simulate upload progress
     let progress = 0;
     const interval = setInterval(() => {
       progress += 10;
       setFiles((prev) =>
-        prev.map((f) =>
-          f.id === newFile.id ? { ...f, progress } : f
-        )
+        prev.map((f) => (f.id === newFile.id ? { ...f, progress } : f))
       );
       if (progress >= 100) clearInterval(interval);
     }, 200);
@@ -55,18 +50,35 @@ function App() {
       </button>
 
       <h3>📂 Files</h3>
-      <ul style={{ listStyle: "none", padding: 0 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+          gap: "20px",
+        }}
+      >
         {files.map((f) => (
-          <li key={f.id} style={{ marginBottom: 20 }}>
-            <p>
-              <strong>{f.name}</strong> ({(f.size / 1024).toFixed(1)} KB)
+          <div
+            key={f.id}
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: "10px",
+              padding: "10px",
+              textAlign: "center",
+              background: "#fafafa",
+              boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
+            }}
+          >
+            <p style={{ fontWeight: "bold" }}>{f.name}</p>
+            <p style={{ fontSize: "12px", color: "#555" }}>
+              {(f.size / 1024).toFixed(1)} KB
             </p>
 
             {/* Progress bar */}
             <div
               style={{
-                width: "300px",
-                height: "10px",
+                width: "100%",
+                height: "8px",
                 background: "#eee",
                 borderRadius: "5px",
                 overflow: "hidden",
@@ -82,14 +94,20 @@ function App() {
                 }}
               ></div>
             </div>
-            <p>{f.progress}%</p>
+            <p style={{ fontSize: "12px" }}>{f.progress}%</p>
 
-            {/* Show previews depending on file type */}
+            {/* Previews */}
             {f.type.startsWith("image/") && (
               <img
                 src={f.preview}
                 alt={f.name}
-                style={{ width: 150, border: "1px solid #ccc", borderRadius: 8 }}
+                style={{
+                  width: "100%",
+                  height: "120px",
+                  objectFit: "cover",
+                  borderRadius: "6px",
+                  marginBottom: "10px",
+                }}
               />
             )}
 
@@ -97,7 +115,12 @@ function App() {
               <iframe
                 src={f.preview}
                 title={f.name}
-                style={{ width: "300px", height: "200px", border: "1px solid #ccc" }}
+                style={{
+                  width: "100%",
+                  height: "120px",
+                  border: "1px solid #ccc",
+                  marginBottom: "10px",
+                }}
               />
             )}
 
@@ -107,25 +130,23 @@ function App() {
               </a>
             )}
 
-            {/* Delete button */}
-            <br />
             <button
               onClick={() => handleDelete(f.id)}
               style={{
-                marginTop: 10,
+                marginTop: "10px",
                 padding: "5px 10px",
                 background: "red",
                 color: "white",
                 border: "none",
-                borderRadius: 5,
+                borderRadius: "5px",
                 cursor: "pointer",
               }}
             >
               ❌ Delete
             </button>
-          </li>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
