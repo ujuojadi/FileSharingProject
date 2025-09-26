@@ -3,6 +3,8 @@ import React, { useState } from "react";
 function App() {
   const [file, setFile] = useState(null);
   const [files, setFiles] = useState([]);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("date"); // default sort by date
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -20,6 +22,7 @@ function App() {
       type: file.type,
       preview: previewUrl,
       progress: 0,
+      uploadedAt: new Date(),
     };
 
     setFiles((prev) => [...prev, newFile]);
@@ -40,6 +43,16 @@ function App() {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
+  // Filter + sort files
+  const filteredFiles = files
+    .filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "size") return a.size - b.size;
+      if (sortBy === "date") return b.uploadedAt - a.uploadedAt; // newest first
+      return 0;
+    });
+
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h2>📤 File Sharing (Frontend Only)</h2>
@@ -49,6 +62,46 @@ function App() {
         Upload
       </button>
 
+      {/* 🔎 Search + Sort */}
+      <div
+        style={{
+          marginTop: 20,
+          marginBottom: 20,
+          display: "flex",
+          gap: "10px",
+          alignItems: "center",
+        }}
+      >
+        <input
+          type="text"
+          placeholder="Search files..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            flex: 1,
+            maxWidth: "300px",
+            padding: "8px",
+            fontSize: "14px",
+            border: "1px solid #ccc",
+            borderRadius: "6px",
+          }}
+        />
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          style={{
+            padding: "8px",
+            fontSize: "14px",
+            border: "1px solid #ccc",
+            borderRadius: "6px",
+          }}
+        >
+          <option value="date">Sort by Date</option>
+          <option value="name">Sort by Name</option>
+          <option value="size">Sort by Size</option>
+        </select>
+      </div>
+
       <h3>📂 Files</h3>
       <div
         style={{
@@ -57,7 +110,7 @@ function App() {
           gap: "20px",
         }}
       >
-        {files.map((f) => (
+        {filteredFiles.map((f) => (
           <div
             key={f.id}
             style={{
@@ -72,6 +125,9 @@ function App() {
             <p style={{ fontWeight: "bold" }}>{f.name}</p>
             <p style={{ fontSize: "12px", color: "#555" }}>
               {(f.size / 1024).toFixed(1)} KB
+            </p>
+            <p style={{ fontSize: "11px", color: "gray" }}>
+              Uploaded: {f.uploadedAt.toLocaleString()}
             </p>
 
             {/* Progress bar */}
@@ -147,6 +203,11 @@ function App() {
           </div>
         ))}
       </div>
+
+      {/* Message if no files match search */}
+      {filteredFiles.length === 0 && files.length > 0 && (
+        <p style={{ marginTop: 20, color: "gray" }}>No files match your search.</p>
+      )}
     </div>
   );
 }
