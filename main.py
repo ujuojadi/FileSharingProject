@@ -4,27 +4,30 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
 from passlib.context import CryptContext
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from settings import settings
+from database import get_db
+from models import User
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-from fastapi.middleware.cors import CORSMiddleware 
+
+origins = (
+    [o.strip() for o in settings.CORS_ORIGINS.split(",")]
+    if settings.CORS_ORIGINS and settings.CORS_ORIGINS != "*"
+    else ["*"]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For dev only; restrict in production
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# Dummy user database (temporary for testing)
-fake_users_db = {
-    "student@example.edu": {
-        "email": "student@example.edu",
-        "hashed_password": "$2b$12$jpMOgzvQg/2zDOsSTsyar.c.ydyfAyZ8H1EB10u3aXof..ixGreeO",  # password: "test123"
-        "name": "Test Student",
-    }
-}
+
 
 # Security settings
-SECRET_KEY = "supersecretkey"  # (you’ll replace this later with env var)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -36,32 +39,26 @@ def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def get_user(db, email: str):
-    if email in db:
-        return db[email]
-    return None
-
-
-def authenticate_user(db, email: str, password: str):
-    user = get_user(db, email)
-    if not user:
-        return False
-    if not verify_password(password, user["hashed_password"]):
-        return False
+async def authenticate_user(db: AsyncSession, email: str, password: str) -> Optional[User]:
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user or not verify_password(password, user.hashed_password):
+        return None
     return user
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    expire = datetime.utcnow() + (expires_delta or timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
 @app.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    user = await authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -69,7 +66,25 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user["email"]}, expires_delta=access_token_expires
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer", "user": user["name"]}
+    return {"access_token": access_token, "token_type": "bearer", "user": user.name}
 
+def get_current_user_email(token: str = Depends(oauth2_scheme)) -> str:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        sub: str = payload.get("sub")
+        if not sub:
+            raise ValueError("Missing sub")
+        return sub
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+# testing
+@app.get("/me")
+async def me(email: str = Depends(get_current_user_email), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"email": user.email, "name": user.name, "created_at": user.created_at}
