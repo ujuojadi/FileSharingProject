@@ -10,6 +10,8 @@ from settings import settings
 from database import get_db
 from models import User
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
+
 
 app = FastAPI()
 
@@ -88,3 +90,36 @@ async def me(email: str = Depends(get_current_user_email), db: AsyncSession = De
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return {"email": user.email, "name": user.name, "created_at": user.created_at}
+
+from fastapi import FastAPI
+
+
+@app.get("/")
+def read_root():
+    return {"message": "FastAPI is running!"}
+
+
+
+GO_SERVER_URL = "http://localhost:8081"  # your running Go server
+
+@app.get("/start-network")
+async def start_network():
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{GO_SERVER_URL}/start")
+        return {"status": response.status_code, "detail": response.json()}
+
+@app.get("/status")
+async def check_status():
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{GO_SERVER_URL}/status")
+        return {"status": response.status_code, "detail": response.json()}
+    
+
+from database import get_db
+from sqlalchemy import text
+from fastapi import Depends
+
+@app.get("/ping-db")
+async def ping_db(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("SELECT 1"))
+    return {"db_connected": bool(result.scalar())}

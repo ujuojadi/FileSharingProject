@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import computed_field
+GO_BACKEND_URL = "http://localhost:8080"  # adjust port if needed
+
 
 class Settings(BaseSettings):
     SECRET_KEY: str
