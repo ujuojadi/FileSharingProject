@@ -1,5 +1,5 @@
 import React from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Container,
   Paper,
@@ -11,6 +11,14 @@ import {
 } from "@mui/material";
 
 function Register() {
+  const navigate = useNavigate();
+
+  const handleRegister = (e) => {
+    e.preventDefault();
+    // TODO: add register validation later
+    navigate("/dashboard");
+  };
+
   return (
     <Box
         sx={{
@@ -31,7 +39,7 @@ function Register() {
         <Typography variant="h4" gutterBottom sx={{ fontWeight: "bold" }}>
           Register
         </Typography>
-        <Box component="form">
+        <Box component="form" onSubmit={handleRegister}>
           <TextField fullWidth label="Name" margin="normal" variant="outlined" />
           <TextField fullWidth label="Email" margin="normal" variant="outlined" />
           <TextField
@@ -41,15 +49,12 @@ function Register() {
             variant="outlined"
             type="password"
           />
-          <Button fullWidth variant="contained" color="primary" sx={{ mt: 2 }}>
+          <Button fullWidth variant="contained" color="primary" sx={{ mt: 2 }} type="submit">
             Register
           </Button>
         </Box>
         <Typography variant="body2" sx={{ mt: 2 }}>
           Already have an account?{" "}
-          {/* <Link href="/login" underline="hover">
-            Login here
-          </Link> */}
           <Link component={RouterLink} to="/login" underline="hover">
             Login here
           </Link>

@@ -1,5 +1,5 @@
 import React from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Container,
   Paper,
@@ -11,6 +11,14 @@ import {
 } from "@mui/material";
 
 function Login() {
+  const navigate = useNavigate();
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    // TODO: add login validation later
+    navigate("/dashboard");
+  };
+
   return (
     <Box
         sx={{
@@ -31,7 +39,7 @@ function Login() {
         <Typography variant="h4" gutterBottom sx={{ fontWeight: "bold" }}>
           Login
         </Typography>
-        <Box component="form">
+        <Box component="form" onSubmit={handleLogin}>
           <TextField fullWidth label="Email" margin="normal" variant="outlined" />
           <TextField
             fullWidth
@@ -40,15 +48,12 @@ function Login() {
             variant="outlined"
             type="password"
           />
-          <Button fullWidth variant="contained" color="primary" sx={{ mt: 2 }}>
+          <Button fullWidth variant="contained" color="primary" sx={{ mt: 2 }} type="submit">
             Login
           </Button>
         </Box>
         <Typography variant="body2" sx={{ mt: 2 }}>
           Don’t have an account?{" "}
-          {/* <Link href="/register" underline="hover">
-            Register here
-          </Link> */}
           <Link component={RouterLink} to="/register" underline="hover">
             Register here
           </Link>
