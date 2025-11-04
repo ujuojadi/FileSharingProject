@@ -27,7 +27,8 @@ yarn-error.log*
 .vscode
 
 # Virtual environment
-*venv
+venv
+.venv
 
 # Secrets
-.env
+*.env
