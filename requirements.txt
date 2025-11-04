@@ -2,7 +2,7 @@ aiomysql==0.3.2
 annotated-doc==0.0.3
 annotated-types==0.7.0
 anyio==4.11.0
-bcrypt==5.0.0
+bcrypt<5
 certifi==2025.10.5
 cffi==2.0.0
 click==8.3.0
@@ -37,7 +37,7 @@ uvicorn==0.38.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==15.0.1
-fastapi>=0.111.0
+fastapi[standard]>=0.111.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
 python-jose[cryptography]>=3.3.0

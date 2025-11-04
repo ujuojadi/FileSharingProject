@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from settings import settings
 from database import get_db
-from models import User
+from models import User, RegisterRequest
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 
@@ -44,6 +44,11 @@ def verify_password(plain_password, hashed_password):
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> Optional[User]:
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
+    print("authenticate_user: ", end="")
+    if user is None:
+        print("user not found")
+    else:
+        print(user.name + " authenticated")
     if not user or not verify_password(password, user.hashed_password):
         return None
     return user
@@ -113,13 +118,30 @@ async def check_status():
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{GO_SERVER_URL}/status")
         return {"status": response.status_code, "detail": response.json()}
-    
-
-from database import get_db
-from sqlalchemy import text
-from fastapi import Depends
 
 @app.get("/ping-db")
 async def ping_db(db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("SELECT 1"))
     return {"db_connected": bool(result.scalar())}
+
+
+@app.post("/register", status_code=status.HTTP_201_CREATED)
+async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    # check if user exists
+    result = await db.execute(select(User).where(User.email == payload.email))
+    existing = result.scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # create user
+    hashed = pwd_context.hash(payload.password)
+    user = User(email=payload.email, hashed_password=hashed, name=payload.name)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    # create token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
+
+    return {"access_token": access_token, "token_type": "bearer", "user": {"email": user.email, "name": user.name}}

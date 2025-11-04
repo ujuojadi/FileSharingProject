@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # Optional: CORS origins (comma-separated)
     CORS_ORIGINS: str = "*"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file="fsp.env", env_file_encoding="utf-8")
 
     @computed_field(return_type=str)
     def DATABASE_URL(self) -> str:
