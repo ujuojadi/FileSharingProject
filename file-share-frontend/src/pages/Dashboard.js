@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AppBar,
   Toolbar,
@@ -26,36 +27,104 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Alert,
+  CircularProgress,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import StarIcon from "@mui/icons-material/Star";
 import GroupsIcon from "@mui/icons-material/Groups";
 import NoteIcon from "@mui/icons-material/Note";
+import { filesAPI, groupsAPI, usersAPI, authAPI, getToken } from "../api";
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState(0);
 
   // Upload modal state
   const [openUpload, setOpenUpload] = useState(false);
   const [file, setFile] = useState(null);
   const [courseCode, setCourseCode] = useState("");
+  const [courseName, setCourseName] = useState("");
   const [description, setDescription] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   // Notes state
-  const [notes, setNotes] = useState([]); // all notes uploaded by the user (local)
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("date");
+  const [error, setError] = useState("");
+
+  // Groups state
+  const [groups, setGroups] = useState([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+
+  // User state
+  const [currentUser, setCurrentUser] = useState(null);
 
   // Details dialog
   const [openDetails, setOpenDetails] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
 
-  const recommendedGroups = [
-    { id: 1, name: "CSCI 475 - Distributed Systems", members: 34 },
-    { id: 2, name: "MATH 301 - Linear Algebra", members: 28 },
-    { id: 3, name: "ENGL 202 - Technical Writing", members: 19 },
-  ];
+  // Fetch files on component mount
+  useEffect(() => {
+    if (!getToken()) {
+      navigate("/login");
+      return;
+    }
+
+    fetchFiles();
+    fetchGroups();
+    fetchCurrentUser();
+  }, [navigate]);
+
+  const fetchFiles = async () => {
+    try {
+      setLoading(true);
+      const files = await filesAPI.listFiles();
+      // Transform API response to match component format
+      const transformedFiles = files.map((f) => ({
+        id: f.id,
+        name: f.filename,
+        size: f.size_bytes,
+        courseCode: f.course_code || "",
+        courseName: f.course_name || "",
+        description: f.description || "",
+        uploadedAt: new Date(f.uploaded_at),
+        type: f.content_type,
+        fileId: f.id,
+        downloadUrl: `/files/${f.id}/download`,
+      }));
+      setNotes(transformedFiles);
+    } catch (err) {
+      setError(err.message || "Failed to load files");
+      console.error("Error fetching files:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchGroups = async () => {
+    try {
+      setLoadingGroups(true);
+      const groupsData = await groupsAPI.listGroups();
+      setGroups(groupsData);
+    } catch (err) {
+      console.error("Error fetching groups:", err);
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
+
+  const fetchCurrentUser = async () => {
+    try {
+      const user = await usersAPI.getCurrentUser();
+      setCurrentUser(user);
+    } catch (err) {
+      console.error("Error fetching user:", err);
+    }
+  };
 
   // Tab handlers
   const handleTabChange = (_, newValue) => setTab(newValue);
@@ -66,46 +135,74 @@ function Dashboard() {
     setOpenUpload(false);
     setFile(null);
     setCourseCode("");
+    setCourseName("");
     setDescription("");
+    setError("");
   };
 
-  // Create a new note (frontend-only)
-  const handleUploadSubmit = (e) => {
+  // Upload file to backend
+  const handleUploadSubmit = async (e) => {
     e.preventDefault();
     if (!file || !courseCode) {
-      // simple validation
-      alert("Please choose a file and enter a course code.");
+      setError("Please choose a file and enter a course code.");
       return;
     }
 
-    // Create preview url for images and PDFs
-    const previewUrl = URL.createObjectURL(file);
-    const newNote = {
-      id: Date.now(),
-      name: file.name,
-      size: file.size,
-      courseCode,
-      description,
-      uploadedAt: new Date(),
-      preview: previewUrl,
-      type: file.type,
-      progress: 0,
-      rating: (3 + Math.random() * 2).toFixed(1),
-    };
+    setUploading(true);
+    setError("");
 
-    // add to top of notes
-    setNotes((prev) => [newNote, ...prev]);
-    closeUploadModal();
-
-    // simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setNotes((prev) =>
-        prev.map((n) => (n.id === newNote.id ? { ...n, progress } : n))
+    try {
+      const uploadedFile = await filesAPI.uploadFile(
+        file,
+        courseCode,
+        courseName || null,
+        description || null
       );
-      if (progress >= 100) clearInterval(interval);
-    }, 150);
+
+      // Refresh files list
+      await fetchFiles();
+      closeUploadModal();
+    } catch (err) {
+      setError(err.message || "Failed to upload file");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Download file from backend
+  const handleDownload = async (note) => {
+    if (!note.fileId) return;
+
+    try {
+      const blob = await filesAPI.downloadFile(note.fileId);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = note.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || "Failed to download file");
+    }
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    authAPI.logout();
+    navigate("/login");
+  };
+
+  // Join group
+  const handleJoinGroup = async (groupId) => {
+    try {
+      await groupsAPI.joinGroup(groupId);
+      alert("Successfully joined group!");
+      fetchGroups();
+    } catch (err) {
+      setError(err.message || "Failed to join group");
+    }
   };
 
   // Search + Sort derived array
@@ -113,12 +210,13 @@ function Dashboard() {
     .filter(
       (n) =>
         n.name.toLowerCase().includes(search.toLowerCase()) ||
-        n.courseCode.toLowerCase().includes(search.toLowerCase())
+        (n.courseCode && n.courseCode.toLowerCase().includes(search.toLowerCase())) ||
+        (n.description && n.description.toLowerCase().includes(search.toLowerCase()))
     )
     .sort((a, b) => {
       if (sortBy === "name") return a.name.localeCompare(b.name);
       if (sortBy === "size") return a.size - b.size;
-      if (sortBy === "date") return b.uploadedAt - a.uploadedAt; // Date subtraction works
+      if (sortBy === "date") return b.uploadedAt - a.uploadedAt;
       return 0;
     });
 
@@ -133,19 +231,16 @@ function Dashboard() {
     setSelectedNote(null);
   };
 
-  // download helper (uses preview blob URL)
-  const handleDownload = (note) => {
-    if (!note || !note.preview) return;
-    const link = document.createElement("a");
-    link.href = note.preview;
-    link.download = note.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   // UI for rendering cards (keeps fixed height & truncation)
   const renderCards = (data) => {
+    if (loading) {
+      return (
+        <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+          <CircularProgress />
+        </Box>
+      );
+    }
+
     return (
       <Grid container spacing={3} sx={{ mt: 2 }}>
         {data.map((item) => (
@@ -154,7 +249,7 @@ function Dashboard() {
               sx={{
                 borderRadius: 3,
                 boxShadow: 3,
-                height: 360, // fixed height for uniformity
+                height: 360,
                 width: 262,
                 display: "flex",
                 flexDirection: "column",
@@ -178,7 +273,7 @@ function Dashboard() {
                 </Typography>
 
                 <Typography variant="body2" color="text.secondary">
-                  {item.courseCode}
+                  {item.courseCode || "No course code"}
                 </Typography>
 
                 {item.description && (
@@ -198,10 +293,10 @@ function Dashboard() {
 
                 {/* preview area */}
                 <Box sx={{ mt: 2, height: 160 }}>
-                  {item.type.startsWith("image/") && (
+                  {item.type && item.type.startsWith("image/") && item.downloadUrl && (
                     <CardMedia
                       component="img"
-                      image={item.preview}
+                      image={`http://127.0.0.1:8000${item.downloadUrl}`}
                       alt={item.name}
                       sx={{
                         width: "100%",
@@ -212,9 +307,9 @@ function Dashboard() {
                     />
                   )}
 
-                  {item.type === "application/pdf" && (
+                  {item.type === "application/pdf" && item.downloadUrl && (
                     <iframe
-                      src={item.preview}
+                      src={`http://127.0.0.1:8000${item.downloadUrl}`}
                       title={item.name}
                       style={{
                         width: "100%",
@@ -222,57 +317,38 @@ function Dashboard() {
                         border: "1px solid #eee",
                         borderRadius: 8,
                       }}
-                      onClick={(ev) => ev.stopPropagation()} // clicking preview shouldn't open details
+                      onClick={(ev) => ev.stopPropagation()}
                     />
                   )}
 
                   {/* generic file icon fallback */}
-                  {!item.type.startsWith("image/") &&
-                    item.type !== "application/pdf" && (
-                      <Box
-                        sx={{
-                          width: "100%",
-                          height: "100%",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          bgcolor: "#f4f4f4",
-                          borderRadius: 1,
-                        }}
-                      >
-                        <UploadFileIcon sx={{ fontSize: 48, color: "#888" }} />
-                      </Box>
-                    )}
-                </Box>
-
-                {/* upload progress */}
-                <Box sx={{ mt: 2 }}>
-                  {item.progress < 100 ? (
-                    <LinearProgress
-                      variant="determinate"
-                      value={item.progress}
-                      sx={{ borderRadius: 1 }}
-                    />
-                  ) : (
-                    <Typography variant="body2" color="success.main">
-                      Uploaded ✅
-                    </Typography>
+                  {(!item.type || (!item.type.startsWith("image/") && item.type !== "application/pdf")) && (
+                    <Box
+                      sx={{
+                        width: "100%",
+                        height: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: "#f4f4f4",
+                        borderRadius: 1,
+                      }}
+                    >
+                      <UploadFileIcon sx={{ fontSize: 48, color: "#888" }} />
+                    </Box>
                   )}
                 </Box>
               </CardContent>
 
               <CardActions sx={{ justifyContent: "space-between", px: 2, pb: 2 }}>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <StarIcon sx={{ color: "#ffb400", fontSize: 18 }} />
-                  <Typography variant="body2" sx={{ ml: 0.5 }}>
-                    {item.rating} / 5
-                  </Typography>
-                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  {new Date(item.uploadedAt).toLocaleDateString()}
+                </Typography>
                 <Button
                   size="small"
                   variant="contained"
                   onClick={(ev) => {
-                    ev.stopPropagation(); // prevent opening details
+                    ev.stopPropagation();
                     handleDownload(item);
                   }}
                 >
@@ -282,14 +358,14 @@ function Dashboard() {
             </Card>
           </Grid>
         ))}
-        {data.length === 0 && (
+        {data.length === 0 && !loading && (
           <Typography
             variant="body1"
             color="text.secondary"
             align="center"
             sx={{ width: "100%", mt: 4 }}
           >
-            No matching notes found.
+            No matching files found.
           </Typography>
         )}
       </Grid>
@@ -317,15 +393,29 @@ function Dashboard() {
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: "bold" }}>
             📚 NOTESHARE Dashboard
           </Typography>
-          <Button color="inherit">Logout</Button>
+          {currentUser && (
+            <Typography variant="body2" sx={{ mr: 2 }}>
+              {currentUser.full_name || currentUser.email}
+            </Typography>
+          )}
+          <Button color="inherit" onClick={handleLogout}>
+            Logout
+          </Button>
         </Toolbar>
       </AppBar>
 
       <Container sx={{ mt: 4 }}>
+        {/* Error alert */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
+            {error}
+          </Alert>
+        )}
+
         {/* search + sort */}
         <Box sx={{ textAlign: "center", mb: 4 }}>
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Welcome back, Student 👋
+            Welcome back, {currentUser?.full_name || "Student"} 👋
           </Typography>
 
           <Box
@@ -349,7 +439,7 @@ function Dashboard() {
               <SearchIcon sx={{ color: "text.secondary" }} />
               <TextField
                 variant="standard"
-                placeholder="Search notes..."
+                placeholder="Search files..."
                 fullWidth
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -377,9 +467,7 @@ function Dashboard() {
                   return value.charAt(0).toUpperCase() + value.slice(1);
                 }}
               >
-                <MenuItem value="">
-                  <em>Sort by</em>
-                </MenuItem>
+                <MenuItem value="">Sort by</MenuItem>
                 <MenuItem value="date">Date</MenuItem>
                 <MenuItem value="name">Name</MenuItem>
                 <MenuItem value="size">Size</MenuItem>
@@ -405,7 +493,7 @@ function Dashboard() {
             indicatorColor="primary"
             sx={{ mb: 3 }}
           >
-            <Tab icon={<NoteIcon />} label="All Notes" />
+            <Tab icon={<NoteIcon />} label="All Files" />
             <Tab icon={<UploadFileIcon />} label="My Uploads" />
             <Tab icon={<GroupsIcon />} label="Groups" />
             <Tab icon={<StarIcon />} label="Top Rated" />
@@ -426,7 +514,7 @@ function Dashboard() {
                   fontWeight: "bold",
                 }}
               >
-                Upload New Note
+                Upload New File
               </Button>
 
               {renderCards(filtered)}
@@ -447,33 +535,45 @@ function Dashboard() {
                   color: "white",
                 }}
               >
-                Create / Join Group
+                Create Group
               </Button>
 
               <Typography variant="subtitle1" fontWeight="bold" sx={{ mt: 3, mb: 2 }}>
-                Recommended for You:
+                Available Groups:
               </Typography>
 
-              <Grid container spacing={2} justifyContent="center">
-                {recommendedGroups.map((g) => (
-                  <Grid item xs={12} sm={6} md={4} key={g.id}>
-                    <Card sx={{ borderRadius: 3, boxShadow: 2, p: 2 }}>
-                      <Typography variant="subtitle1" fontWeight="bold" noWrap>
-                        {g.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {g.members} members
-                      </Typography>
-                      <Button
-                        variant="outlined"
-                        sx={{ mt: 1, color: "#1976d2", borderColor: "#1976d2" }}
-                      >
-                        Join Group
-                      </Button>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
+              {loadingGroups ? (
+                <CircularProgress />
+              ) : (
+                <Grid container spacing={2} justifyContent="center">
+                  {groups.map((g) => (
+                    <Grid item xs={12} sm={6} md={4} key={g.id}>
+                      <Card sx={{ borderRadius: 3, boxShadow: 2, p: 2 }}>
+                        <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                          {g.name}
+                        </Typography>
+                        {g.description && (
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            {g.description}
+                          </Typography>
+                        )}
+                        <Button
+                          variant="outlined"
+                          sx={{ mt: 1, color: "#1976d2", borderColor: "#1976d2" }}
+                          onClick={() => handleJoinGroup(g.id)}
+                        >
+                          Join Group
+                        </Button>
+                      </Card>
+                    </Grid>
+                  ))}
+                  {groups.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      No groups available
+                    </Typography>
+                  )}
+                </Grid>
+              )}
             </Box>
           )}
           {tab === 3 && renderCards(filtered)}
@@ -498,8 +598,14 @@ function Dashboard() {
           }}
         >
           <Typography variant="h6" mb={2}>
-            Upload a New Note
+            Upload a New File
           </Typography>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
+              {error}
+            </Alert>
+          )}
 
           <Button
             variant="contained"
@@ -527,10 +633,18 @@ function Dashboard() {
           )}
 
           <TextField
-            label="Course Code"
+            label="Course Code *"
             fullWidth
             value={courseCode}
             onChange={(e) => setCourseCode(e.target.value)}
+            sx={{ mb: 2 }}
+            required
+          />
+          <TextField
+            label="Course Name"
+            fullWidth
+            value={courseName}
+            onChange={(e) => setCourseName(e.target.value)}
             sx={{ mb: 2 }}
           />
           <TextField
@@ -544,18 +658,19 @@ function Dashboard() {
           />
 
           <Box sx={{ textAlign: "right" }}>
-            <Button onClick={closeUploadModal} sx={{ mr: 1 }}>
+            <Button onClick={closeUploadModal} sx={{ mr: 1 }} disabled={uploading}>
               Cancel
             </Button>
             <Button
               type="submit"
               variant="contained"
+              disabled={uploading || !file || !courseCode}
               sx={{
                 background: "linear-gradient(90deg, #1976d2, #43a047)",
                 color: "white",
               }}
             >
-              Upload
+              {uploading ? <CircularProgress size={24} /> : "Upload"}
             </Button>
           </Box>
         </Box>
@@ -571,38 +686,49 @@ function Dashboard() {
                 {selectedNote.name}
               </Typography>
               <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
-                Course: {selectedNote.courseCode} • Uploaded: {selectedNote.uploadedAt.toLocaleString()}
+                Course: {selectedNote.courseCode || "N/A"} • Uploaded:{" "}
+                {new Date(selectedNote.uploadedAt).toLocaleString()}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Size: {(selectedNote.size / 1024).toFixed(2)} KB
               </Typography>
 
-              {selectedNote.type.startsWith("image/") && (
+              {selectedNote.description && (
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  {selectedNote.description}
+                </Typography>
+              )}
+
+              {selectedNote.downloadUrl && selectedNote.type && selectedNote.type.startsWith("image/") && (
                 <Box sx={{ mb: 2 }}>
                   <img
-                    src={selectedNote.preview}
+                    src={`http://127.0.0.1:8000${selectedNote.downloadUrl}`}
                     alt={selectedNote.name}
-                    style={{ width: "100%", maxHeight: 400, objectFit: "contain", borderRadius: 8 }}
+                    style={{
+                      width: "100%",
+                      maxHeight: 400,
+                      objectFit: "contain",
+                      borderRadius: 8,
+                    }}
                   />
                 </Box>
               )}
 
-              {selectedNote.type === "application/pdf" && (
+              {selectedNote.downloadUrl && selectedNote.type === "application/pdf" && (
                 <Box sx={{ mb: 2 }}>
                   <iframe
-                    src={selectedNote.preview}
+                    src={`http://127.0.0.1:8000${selectedNote.downloadUrl}`}
                     title={selectedNote.name}
                     style={{ width: "100%", height: 480, border: "none" }}
                   />
                 </Box>
               )}
 
-              {(!selectedNote.type.startsWith("image/") && selectedNote.type !== "application/pdf") && (
+              {(!selectedNote.type ||
+                (!selectedNote.type.startsWith("image/") &&
+                  selectedNote.type !== "application/pdf")) && (
                 <Typography variant="body2" sx={{ mb: 2 }}>
                   File preview not available for this type. Use download to save it locally.
-                </Typography>
-              )}
-
-              {selectedNote.description && (
-                <Typography variant="body1" sx={{ mb: 2 }}>
-                  {selectedNote.description}
                 </Typography>
               )}
             </>

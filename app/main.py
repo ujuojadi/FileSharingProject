@@ -23,6 +23,25 @@ def ensure_uploads_dir() -> None:
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+@app.get("/", tags=["root"])
+async def root() -> dict:
+    """Root endpoint - API information"""
+    return {
+        "message": "Welcome to NOTESHARE API",
+        "version": "0.1.0",
+        "docs": "/docs",
+        "health": "/health",
+        "endpoints": {
+            "auth": "/auth/register, /auth/login, /auth/verify",
+            "files": "/files/, /files/upload, /files/{id}/download",
+            "groups": "/groups/",
+            "users": "/users/",
+            "search": "/search/",
+            "feedback": "/feedback/",
+        }
+    }
+
+
 @app.get("/health", tags=["health"])  # simple health check
 async def health() -> dict[str, str]:
     return {"status": "ok"}
