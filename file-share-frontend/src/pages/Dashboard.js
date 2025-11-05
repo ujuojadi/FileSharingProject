@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   AppBar,
   Toolbar,
@@ -26,14 +26,19 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import StarIcon from "@mui/icons-material/Star";
 import GroupsIcon from "@mui/icons-material/Groups";
 import NoteIcon from "@mui/icons-material/Note";
+import { files, groups, feedback, users, auth } from "../api";
 
 function Dashboard() {
+  // User state
+  const [user, setUser] = useState(null);
   const [tab, setTab] = useState(0);
 
   // Upload modal state
@@ -46,16 +51,37 @@ function Dashboard() {
   const [notes, setNotes] = useState([]); // all notes uploaded by the user (local)
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("date");
-
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
   // Details dialog
   const [openDetails, setOpenDetails] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
 
-  const recommendedGroups = [
+    const recommendedGroups = [
     { id: 1, name: "CSCI 475 - Distributed Systems", members: 34 },
     { id: 2, name: "MATH 301 - Linear Algebra", members: 28 },
     { id: 3, name: "ENGL 202 - Technical Writing", members: 19 },
   ];
+
+  // Snackbar state
+  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
+
+  // Load user profile and initial data
+  useEffect(() => {
+    const loadUserAndData = async () => {
+      try {
+        const userResponse = await users.getProfile();
+        setUser(userResponse.data);
+      } catch (err) {
+        console.error("Failed to load initial data:", err);
+        setError("Failed to load data. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUserAndData();
+  }, []);
 
   // Tab handlers
   const handleTabChange = (_, newValue) => setTab(newValue);
@@ -73,8 +99,11 @@ function Dashboard() {
   const handleUploadSubmit = (e) => {
     e.preventDefault();
     if (!file || !courseCode) {
-      // simple validation
-      alert("Please choose a file and enter a course code.");
+      setSnackbar({
+        open: true,
+        message: "Please choose a file and enter a course code.",
+        severity: "error"
+      });
       return;
     }
 
@@ -84,7 +113,7 @@ function Dashboard() {
       id: Date.now(),
       name: file.name,
       size: file.size,
-      courseCode,
+        courseCode,
       description,
       uploadedAt: new Date(),
       preview: previewUrl,
@@ -95,7 +124,7 @@ function Dashboard() {
 
     // add to top of notes
     setNotes((prev) => [newNote, ...prev]);
-    closeUploadModal();
+      closeUploadModal();
 
     // simulate upload progress
     let progress = 0;
@@ -317,7 +346,24 @@ function Dashboard() {
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: "bold" }}>
             📚 NOTESHARE Dashboard
           </Typography>
-          <Button color="inherit">Logout</Button>
+          <Button 
+            color="inherit" 
+            onClick={async () => {
+              try {
+                await auth.logout();
+                window.location.href = "/login";
+              } catch (err) {
+                console.error("Logout failed:", err);
+                setSnackbar({
+                  open: true,
+                  message: "Logout failed. Please try again.",
+                  severity: "error"
+                });
+              }
+            }}
+          >
+            Logout
+          </Button>
         </Toolbar>
       </AppBar>
 
@@ -621,6 +667,34 @@ function Dashboard() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
+      {/* Loading indicator */}
+      {loading && (
+        <LinearProgress
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 9999
+          }}
+        />
+      )}
     </Box>
   );
 }

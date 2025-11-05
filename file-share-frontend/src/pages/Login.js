@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -8,15 +8,31 @@ import {
   Button,
   Box,
   Link,
+  Alert,
 } from "@mui/material";
+import { auth } from "../api";
 
 function Login() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // TODO: add login validation later
-    navigate("/dashboard");
+    setError("");
+    setIsLoading(true);
+    
+    try {
+      const response = await auth.login({ username: email, password });
+      localStorage.setItem("token", response.data.access_token);
+      navigate("/dashboard");
+    } catch (error) {
+      setError(error.response?.data?.detail || "Login failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -40,13 +56,26 @@ function Login() {
           Login
         </Typography>
         <Box component="form" onSubmit={handleLogin}>
-          <TextField fullWidth label="Email" margin="normal" variant="outlined" />
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          <TextField
+            fullWidth
+            label="Email"
+            margin="normal"
+            variant="outlined"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            type="email"
+          />
           <TextField
             fullWidth
             label="Password"
             margin="normal"
             variant="outlined"
             type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
           />
           <Button fullWidth variant="contained" color="primary" sx={{ mt: 2 }} type="submit">
             Login
