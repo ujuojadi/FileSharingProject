@@ -1,9 +1,9 @@
 package p2p
 
 import (
-	 "encoding/gob"
-	 "io"
-
+     "encoding/binary"
+     "encoding/gob"
+     "io"
 )
 
 type Decoder interface {
@@ -19,23 +19,30 @@ func (dec GOBDecoder) Decode(r io.Reader, msg *RPC) error{
 type DefaultDecoder struct{}
 
 func (dec DefaultDecoder) Decode(r io.Reader, msg *RPC) error{
-	peekBuf := make([]byte, 1)
-	if _, err :=r.Read(peekBuf); err!= nil {
-		return nil
-	}
+    // Read the first control byte
+    ctrl := make([]byte, 1)
+    if _, err := io.ReadFull(r, ctrl); err != nil {
+        return err
+    }
 
-	stream :=peekBuf[0] ==IncomingStream
-	if stream {
-		msg.Stream = true
-		return nil
-	}
+    if ctrl[0] == IncomingStream {
+        msg.Stream = true
+        return nil
+    }
 
-	buf :=make([]byte, 1028)
-	n, err :=r.Read(buf)
-	if err !=nil {
-		return err
-	}
-	msg.Payload = buf[:n]
-
-	return nil
+    // IncomingMessage: next 4 bytes are length (big-endian), followed by payload
+    var length uint32
+    if err := binary.Read(r, binary.BigEndian, &length); err != nil {
+        return err
+    }
+    if length == 0 {
+        msg.Payload = nil
+        return nil
+    }
+    buf := make([]byte, int(length))
+    if _, err := io.ReadFull(r, buf); err != nil {
+        return err
+    }
+    msg.Payload = buf
+    return nil
 }

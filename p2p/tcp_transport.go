@@ -59,6 +59,7 @@ type TCPTransportOpts struct {
 	HandshakeFunc HandshakeFunc
 	Decoder     Decoder
 	OnPeer      func(Peer) error
+    OnPeerDisconnected func(Peer) error
 }
 
 type TCPTransport struct {
@@ -142,14 +143,16 @@ func(t *TCPTransport) startAcceptLoop() {
 
 
 func (t *TCPTransport) handleConn(conn net.Conn, outbound bool){
-	var err error
-	defer func() {
+    var err error
+    peer := NewTCPPeer(conn, outbound)
+    defer func() {
           fmt.Printf("dropping peer connection: %s", err)
-		  conn.Close()
-	}()
+          conn.Close()
+          if t.OnPeerDisconnected != nil {
+              _ = t.OnPeerDisconnected(peer)
+          }
+    }()
 
-
-    peer :=NewTCPPeer(conn, outbound)
 	if err =t.HandshakeFunc(peer); err !=nil { 
 	   return 
 	}
