@@ -1,17 +1,19 @@
 package main
 
 import(
-	 "github.com/ujuojadi/FileSharingProject/p2p"
-	 "log"
-	 "fmt"
-	 "sync"
-	 "io"
-	  "encoding/gob"
-	 "bytes"
-	 "time"
-	 
-	 
-	)
+     "github.com/ujuojadi/FileSharingProject/p2p"
+     "log"
+     "fmt"
+     "sync"
+     "io"
+      "encoding/gob"
+     "bytes"
+     "time"
+     "encoding/binary"
+     "os"
+     
+     
+    )
 
 
 type ServerOpts struct {
@@ -26,7 +28,7 @@ type ServerOpts struct {
 type FileServer struct {
 	opts  ServerOpts
 
-	peerLock sync.Mutex
+    peerLock sync.RWMutex
 	peers map[string]p2p.Peer
 	store *Store
 	quitch chan struct {}
@@ -64,15 +66,28 @@ func (s *FileServer) stream(msg *Message) error{
 
 
 func (s *FileServer) broadcast(msg *Message)error {
-	buf :=new(bytes.Buffer)
-	if err :=gob.NewEncoder(buf).Encode(msg); err !=nil {
-		return err
-	}
-	for _, peer :=range s.peers{
-		peer.Send([]byte{p2p.IncomingMessage})
-		if err := peer.Send(buf.Bytes()); err !=nil{
-			return err
-		}
+    buf :=new(bytes.Buffer)
+    if err :=gob.NewEncoder(buf).Encode(msg); err !=nil {
+        return err
+    }
+    payload := buf.Bytes()
+    s.peerLock.RLock()
+    defer s.peerLock.RUnlock()
+    for _, peer :=range s.peers{
+        // control byte
+        if err := peer.Send([]byte{p2p.IncomingMessage}); err != nil {
+            return err
+        }
+        // 4-byte big-endian length
+        lenBuf := make([]byte, 4)
+        binary.BigEndian.PutUint32(lenBuf, uint32(len(payload)))
+        if err := peer.Send(lenBuf); err != nil {
+            return err
+        }
+        // payload
+        if err := peer.Send(payload); err != nil{
+            return err
+        }
 
    }
    return nil
@@ -106,22 +121,39 @@ func (s *FileServer) Get(key string) (io.Reader, error){
 	if err :=s.broadcast(&msg); err !=nil{
 		return nil, err
 	}
+    // Wait for a peer to start a stream and read size-prefixed content
+    timeout := time.After(5 * time.Second)
+    s.peerLock.RLock()
+    peersSnapshot := make([]p2p.Peer, 0, len(s.peers))
+    for _, p := range s.peers { peersSnapshot = append(peersSnapshot, p) }
+    s.peerLock.RUnlock()
 
-	for _, peer :=range s.peers {
-		fmt.Println("receiving stream from peer:", peer.RemoteAddr())
-		fileBuffer :=new(bytes.Buffer)
-		n, err :=io.CopyN(fileBuffer, peer, 22)
-		if err !=nil {
-			return nil, err
-		}
+    for _, peer := range peersSnapshot {
+        // Try to read a stream control byte
+        ctrl := make([]byte, 1)
+        peer.SetReadDeadline(time.Now().Add(2 * time.Second))
+        if _, err := io.ReadFull(peer, ctrl); err != nil {
+            continue
+        }
+        if ctrl[0] != p2p.IncomingStream {
+            continue
+        }
+        // Read 8-byte big-endian length
+        var size uint64
+        if err := binary.Read(peer, binary.BigEndian, &size); err != nil {
+            return nil, err
+        }
+        fileBuffer := new(bytes.Buffer)
+        if _, err := io.CopyN(fileBuffer, peer, int64(size)); err != nil {
+            return nil, err
+        }
+        return fileBuffer, nil
+    }
 
-		fmt.Println("received bytes over the network", n)
-		fmt.Println(fileBuffer.String())
-	}
-	
-	select{}
-
-	return nil, nil
+    select {
+    case <-timeout:
+        return nil, fmt.Errorf("timeout waiting for stream")
+    }
 }
 
 func(s *FileServer) Store(key string, r io.Reader)error {
@@ -197,6 +229,17 @@ func (s *FileServer) OnPeer(p p2p.Peer)  error {
 
 }
 
+func (s *FileServer) OnPeerDisconnected(p p2p.Peer) error {
+    s.peerLock.Lock()
+    defer s.peerLock.Unlock()
+    addr := p.RemoteAddr().String()
+    if _, ok := s.peers[addr]; ok {
+        delete(s.peers, addr)
+        log.Printf("disconnected remote %s (removed from peers)", addr)
+    }
+    return nil
+}
+
 func (s *FileServer) loop(){
 	defer func (){
 		log.Println("file server stopped due to error or  user quit action")
@@ -242,29 +285,47 @@ func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile)error{
 		log.Printf("need to serve file but it (%s) does not exist on disk\n", msg.Key)
 	}
 
-	fmt.Printf("got file (%s) serving over the network", msg.Key)
-	r, err :=s.store.Read(msg.Key)
-	if err!=nil{
-		return err
-	}
-
-	peer, ok :=s.peers[from]
+    fmt.Printf("got file (%s) serving over the network", msg.Key)
+    // Open file stream and determine size
+    s.peerLock.RLock()
+    peer, ok :=s.peers[from]
+    s.peerLock.RUnlock()
 	if !ok {
 		return fmt.Errorf("peer %s not in map", from)
 	}
-
-	n, err :=io.Copy(peer, r)
-	if err!=nil{
-		return err
-	}
-
-	fmt.Printf("written %d bytes over the network to %s\n", n, from)
-
-	return nil
+    // Use internal readStream to get *os.File for stat and streaming
+    f, err := s.store.readStream(msg.Key)
+    if err != nil {
+        return err
+    }
+    defer f.Close()
+    // Determine size
+    var size int64
+    if of, ok := f.(*os.File); ok {
+        if fi, err := of.Stat(); err == nil {
+            size = fi.Size()
+        }
+    }
+    // Signal stream and send size (8 bytes), then content
+    if err := peer.Send([]byte{p2p.IncomingStream}); err != nil {
+        return err
+    }
+    if err := binary.Write(peer, binary.BigEndian, uint64(size)); err != nil {
+        return err
+    }
+    n, err := io.Copy(peer, f)
+    if err != nil {
+        return err
+    }
+    fmt.Printf("written %d bytes over the network to %s\n", n, from)
+    peer.CloseStream()
+    return nil
 }
 
 func (s *FileServer)handleMessageStoreFile(from string, msg MessageStoreFile) error {
-	peer, ok :=s.peers[from]
+    s.peerLock.RLock()
+    peer, ok :=s.peers[from]
+    s.peerLock.RUnlock()
 	if !ok {
 		return fmt.Errorf("peer  (%s) could not be found in the peer list", from)
 	}
@@ -313,11 +374,9 @@ func (s *FileServer) Start() error{
 		return err
 	}
 
-	if len(s.opts.BootstrapNodes) !=0{
-		s.bootstrapNetwork()
-	}
-
-	s.bootstrapNetwork()
+    if len(s.opts.BootstrapNodes) !=0{
+        s.bootstrapNetwork()
+    }
 
 	s.loop()
 	return nil
