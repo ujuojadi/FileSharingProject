@@ -1,9 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import computed_field
-GO_BACKEND_URL = "http://localhost:8080"  # adjust port if needed
 
 
 class Settings(BaseSettings):
+    
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     # Optional: CORS origins (comma-separated)
     CORS_ORIGINS: str = "*"
 
-    model_config = SettingsConfigDict(env_file="fsp.env", env_file_encoding="utf-8")
+    GO_BACKEND_URL : str = "http://localhost:8080"
+    REACT_APP_API_BASE_URL : str = GO_BACKEND_URL
+
+    model_config = SettingsConfigDict(env_file="fsp.env", env_file_encoding="utf-8", extra="ignore")
 
     @computed_field(return_type=str)
     def DATABASE_URL(self) -> str:

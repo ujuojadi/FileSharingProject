@@ -103,9 +103,7 @@ from fastapi import FastAPI
 def read_root():
     return {"message": "FastAPI is running!"}
 
-
-
-GO_SERVER_URL = "http://localhost:8081"  # your running Go server
+GO_SERVER_URL = settings.GO_BACKEND_URL
 
 @app.get("/start-network")
 async def start_network():
