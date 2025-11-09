@@ -126,7 +126,10 @@ async def ping_db(db: AsyncSession = Depends(get_db)):
 
 
 @app.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    payload: RegisterRequest = Depends(RegisterRequest.as_form),
+    db: AsyncSession = Depends(get_db),
+):
     # check if user exists
     result = await db.execute(select(User).where(User.email == payload.email))
     existing = result.scalar_one_or_none()
