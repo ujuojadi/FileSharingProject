@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -8,15 +8,37 @@ import {
   Button,
   Box,
   Link,
+  Alert,
 } from "@mui/material";
+import { registerUser, loginUser } from "../api";
 
 function Register() {
   const navigate = useNavigate();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    // TODO: add register validation later
-    navigate("/dashboard");
+    setError("");
+    setLoading(true);
+    
+    try {
+      await registerUser({
+        name: name,
+        email: email,
+        password: password,
+      });
+      // After registration, automatically login
+      await loginUser(email, password);
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Registration failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -39,18 +61,50 @@ function Register() {
         <Typography variant="h4" gutterBottom sx={{ fontWeight: "bold" }}>
           Register
         </Typography>
+        {error && (
+          <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         <Box component="form" onSubmit={handleRegister}>
-          <TextField fullWidth label="Name" margin="normal" variant="outlined" />
-          <TextField fullWidth label="Email" margin="normal" variant="outlined" />
+          <TextField 
+            fullWidth 
+            label="Name" 
+            margin="normal" 
+            variant="outlined"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <TextField 
+            fullWidth 
+            label="Email" 
+            margin="normal" 
+            variant="outlined"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            type="email"
+          />
           <TextField
             fullWidth
             label="Password"
             margin="normal"
             variant="outlined"
             type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
           />
-          <Button fullWidth variant="contained" color="primary" sx={{ mt: 2 }} type="submit">
-            Register
+          <Button 
+            fullWidth 
+            variant="contained" 
+            color="primary" 
+            sx={{ mt: 2 }} 
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? "Registering..." : "Register"}
           </Button>
         </Box>
         <Typography variant="body2" sx={{ mt: 2 }}>

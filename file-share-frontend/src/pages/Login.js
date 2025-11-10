@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -8,15 +8,30 @@ import {
   Button,
   Box,
   Link,
+  Alert,
 } from "@mui/material";
+import { loginUser } from "../api";
 
 function Login() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // TODO: add login validation later
-    navigate("/dashboard");
+    setError("");
+    setLoading(true);
+    
+    try {
+      await loginUser(email, password);
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -39,17 +54,41 @@ function Login() {
         <Typography variant="h4" gutterBottom sx={{ fontWeight: "bold" }}>
           Login
         </Typography>
+        {error && (
+          <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         <Box component="form" onSubmit={handleLogin}>
-          <TextField fullWidth label="Email" margin="normal" variant="outlined" />
+          <TextField 
+            fullWidth 
+            label="Email" 
+            margin="normal" 
+            variant="outlined"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            type="email"
+          />
           <TextField
             fullWidth
             label="Password"
             margin="normal"
             variant="outlined"
             type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
           />
-          <Button fullWidth variant="contained" color="primary" sx={{ mt: 2 }} type="submit">
-            Login
+          <Button 
+            fullWidth 
+            variant="contained" 
+            color="primary" 
+            sx={{ mt: 2 }} 
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? "Logging in..." : "Login"}
           </Button>
         </Box>
         <Typography variant="body2" sx={{ mt: 2 }}>

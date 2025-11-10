@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # File uploads
     base_dir: str = os.path.dirname(os.path.dirname(__file__))
     uploads_dir: str = os.path.join(base_dir, "uploads")
+    
+    # P2P Backend
+    p2p_backend_url: str = "http://localhost:8081"
 
 
 @lru_cache

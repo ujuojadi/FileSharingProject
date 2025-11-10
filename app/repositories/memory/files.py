@@ -11,8 +11,23 @@ class InMemoryFilesRepository:
         self._files_by_id: dict[UUID, FileMeta] = {}
         self._files_by_uploader: dict[UUID, list[UUID]] = {}
 
-    async def create(self, data: FileMetaCreate) -> FileMeta:
-        meta = FileMeta(**data.model_dump())
+    async def create(self, data: FileMetaCreate, file_id: Optional[UUID] = None) -> FileMeta:
+        data_dict = data.model_dump()
+        if file_id:
+            # Create FileMeta with specific ID by manually constructing it
+            meta = FileMeta(
+                id=file_id,
+                filename=data_dict["filename"],
+                content_type=data_dict["content_type"],
+                size_bytes=data_dict["size_bytes"],
+                uploader_id=data_dict["uploader_id"],
+                course_code=data_dict.get("course_code"),
+                course_name=data_dict.get("course_name"),
+                description=data_dict.get("description"),
+                stored_path=data_dict["stored_path"],
+            )
+        else:
+            meta = FileMeta(**data_dict)
         self._files_by_id[meta.id] = meta
         self._files_by_uploader.setdefault(meta.uploader_id, []).append(meta.id)
         return meta

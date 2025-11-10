@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AppBar,
   Toolbar,
@@ -26,30 +27,78 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Alert,
+  CircularProgress,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import StarIcon from "@mui/icons-material/Star";
 import GroupsIcon from "@mui/icons-material/Groups";
 import NoteIcon from "@mui/icons-material/Note";
+import { getFiles, uploadNote, downloadNote, getToken, logout } from "../api";
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState(0);
 
   // Upload modal state
   const [openUpload, setOpenUpload] = useState(false);
   const [file, setFile] = useState(null);
   const [courseCode, setCourseCode] = useState("");
+  const [courseName, setCourseName] = useState("");
   const [description, setDescription] = useState("");
 
   // Notes state
-  const [notes, setNotes] = useState([]); // all notes uploaded by the user (local)
+  const [notes, setNotes] = useState([]); // all notes from backend
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("date");
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Details dialog
   const [openDetails, setOpenDetails] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
+
+  // Check authentication on mount
+  useEffect(() => {
+    if (!getToken()) {
+      navigate("/login");
+      return;
+    }
+    fetchFiles();
+  }, [navigate]);
+
+  // Fetch files from backend
+  const fetchFiles = async () => {
+    try {
+      setLoading(true);
+      const files = await getFiles();
+      // Map backend file data to frontend format
+      const mappedFiles = files.map((file) => ({
+        id: file.id,
+        name: file.filename,
+        size: file.size_bytes,
+        courseCode: file.course_code || "",
+        courseName: file.course_name || "",
+        description: file.description || "",
+        uploadedAt: new Date(file.uploaded_at),
+        type: file.content_type || "application/octet-stream",
+        rating: "4.0", // Placeholder - can be fetched from feedback API
+        fileId: file.id, // Store backend file ID for downloads
+      }));
+      setNotes(mappedFiles);
+      setError("");
+    } catch (err) {
+      setError(err.message || "Failed to fetch files");
+      if (err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const recommendedGroups = [
     { id: 1, name: "CSCI 475 - Distributed Systems", members: 34 },
@@ -66,46 +115,71 @@ function Dashboard() {
     setOpenUpload(false);
     setFile(null);
     setCourseCode("");
+    setCourseName("");
     setDescription("");
   };
 
-  // Create a new note (frontend-only)
-  const handleUploadSubmit = (e) => {
+  // Handle file upload
+  const handleUploadSubmit = async (e) => {
     e.preventDefault();
     if (!file || !courseCode) {
-      // simple validation
-      alert("Please choose a file and enter a course code.");
+      setError("Please choose a file and enter a course code.");
       return;
     }
 
-    // Create preview url for images and PDFs
-    const previewUrl = URL.createObjectURL(file);
-    const newNote = {
-      id: Date.now(),
-      name: file.name,
-      size: file.size,
-      courseCode,
-      description,
-      uploadedAt: new Date(),
-      preview: previewUrl,
-      type: file.type,
-      progress: 0,
-      rating: (3 + Math.random() * 2).toFixed(1),
-    };
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+      setError("");
 
-    // add to top of notes
-    setNotes((prev) => [newNote, ...prev]);
-    closeUploadModal();
+      // Simulate progress (since we don't have real progress tracking)
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
 
-    // simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setNotes((prev) =>
-        prev.map((n) => (n.id === newNote.id ? { ...n, progress } : n))
-      );
-      if (progress >= 100) clearInterval(interval);
-    }, 150);
+      // Upload file to backend
+      const uploadedFile = await uploadNote(file, courseCode, courseName, description);
+      setUploadProgress(100);
+      clearInterval(progressInterval);
+
+      // Add uploaded file to the list
+      const newNote = {
+        id: uploadedFile.id,
+        name: uploadedFile.filename,
+        size: uploadedFile.size_bytes,
+        courseCode: uploadedFile.course_code || "",
+        courseName: uploadedFile.course_name || "",
+        description: uploadedFile.description || "",
+        uploadedAt: new Date(uploadedFile.uploaded_at),
+        type: uploadedFile.content_type || "application/octet-stream",
+        rating: "4.0",
+        fileId: uploadedFile.id,
+      };
+
+      setNotes((prev) => [newNote, ...prev]);
+      closeUploadModal();
+      setUploadProgress(0);
+    } catch (err) {
+      setError(err.message || "Upload failed");
+      if (err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
   };
 
   // Search + Sort derived array
@@ -113,14 +187,24 @@ function Dashboard() {
     .filter(
       (n) =>
         n.name.toLowerCase().includes(search.toLowerCase()) ||
-        n.courseCode.toLowerCase().includes(search.toLowerCase())
+        (n.courseCode && n.courseCode.toLowerCase().includes(search.toLowerCase()))
     )
     .sort((a, b) => {
       if (sortBy === "name") return a.name.localeCompare(b.name);
       if (sortBy === "size") return a.size - b.size;
-      if (sortBy === "date") return b.uploadedAt - a.uploadedAt; // Date subtraction works
+      if (sortBy === "date") return new Date(b.uploadedAt) - new Date(a.uploadedAt);
       return 0;
     });
+
+  // Generate preview URL for images/PDFs (for display only)
+  const getPreviewUrl = (note) => {
+    if (note.type && note.type.startsWith("image/")) {
+      // For images, we'd need to fetch from backend or use a blob
+      // For now, return null and handle in UI
+      return null;
+    }
+    return null;
+  };
 
   // Card click: show details
   const handleCardClick = (note) => {
@@ -133,15 +217,17 @@ function Dashboard() {
     setSelectedNote(null);
   };
 
-  // download helper (uses preview blob URL)
-  const handleDownload = (note) => {
-    if (!note || !note.preview) return;
-    const link = document.createElement("a");
-    link.href = note.preview;
-    link.download = note.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Handle file download
+  const handleDownload = async (note) => {
+    if (!note || !note.fileId) return;
+    try {
+      await downloadNote(note.fileId, note.name);
+    } catch (err) {
+      setError(err.message || "Download failed");
+      if (err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
+    }
   };
 
   // UI for rendering cards (keeps fixed height & truncation)
@@ -178,7 +264,7 @@ function Dashboard() {
                 </Typography>
 
                 <Typography variant="body2" color="text.secondary">
-                  {item.courseCode}
+                  {item.courseCode || "No course"}
                 </Typography>
 
                 {item.description && (
@@ -198,66 +284,31 @@ function Dashboard() {
 
                 {/* preview area */}
                 <Box sx={{ mt: 2, height: 160 }}>
-                  {item.type.startsWith("image/") && (
-                    <CardMedia
-                      component="img"
-                      image={item.preview}
-                      alt={item.name}
-                      sx={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                        borderRadius: 1,
-                      }}
-                    />
-                  )}
-
-                  {item.type === "application/pdf" && (
-                    <iframe
-                      src={item.preview}
-                      title={item.name}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        border: "1px solid #eee",
-                        borderRadius: 8,
-                      }}
-                      onClick={(ev) => ev.stopPropagation()} // clicking preview shouldn't open details
-                    />
-                  )}
-
-                  {/* generic file icon fallback */}
-                  {!item.type.startsWith("image/") &&
-                    item.type !== "application/pdf" && (
-                      <Box
-                        sx={{
-                          width: "100%",
-                          height: "100%",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          bgcolor: "#f4f4f4",
-                          borderRadius: 1,
-                        }}
-                      >
-                        <UploadFileIcon sx={{ fontSize: 48, color: "#888" }} />
-                      </Box>
-                    )}
+                  {/* Generic file icon for all files (preview would require additional API calls) */}
+                  <Box
+                    sx={{
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      bgcolor: "#f4f4f4",
+                      borderRadius: 1,
+                    }}
+                  >
+                    <UploadFileIcon sx={{ fontSize: 48, color: "#888" }} />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                      {item.type.split("/")[1]?.toUpperCase() || "FILE"}
+                    </Typography>
+                  </Box>
                 </Box>
 
-                {/* upload progress */}
+                {/* File info */}
                 <Box sx={{ mt: 2 }}>
-                  {item.progress < 100 ? (
-                    <LinearProgress
-                      variant="determinate"
-                      value={item.progress}
-                      sx={{ borderRadius: 1 }}
-                    />
-                  ) : (
-                    <Typography variant="body2" color="success.main">
-                      Uploaded ✅
-                    </Typography>
-                  )}
+                  <Typography variant="body2" color="text.secondary">
+                    {(item.size / 1024).toFixed(1)} KB
+                  </Typography>
                 </Box>
               </CardContent>
 
@@ -317,11 +368,27 @@ function Dashboard() {
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: "bold" }}>
             📚 NOTESHARE Dashboard
           </Typography>
-          <Button color="inherit">Logout</Button>
+          <Button color="inherit" onClick={handleLogout}>
+            Logout
+          </Button>
         </Toolbar>
       </AppBar>
 
       <Container sx={{ mt: 4 }}>
+        {/* Error message */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
+            {error}
+          </Alert>
+        )}
+
+        {/* Loading indicator */}
+        {loading && (
+          <Box sx={{ display: "flex", justifyContent: "center", my: 4 }}>
+            <CircularProgress />
+          </Box>
+        )}
+
         {/* search + sort */}
         <Box sx={{ textAlign: "center", mb: 4 }}>
           <Typography variant="h5" fontWeight="bold" gutterBottom>
@@ -531,6 +598,14 @@ function Dashboard() {
             fullWidth
             value={courseCode}
             onChange={(e) => setCourseCode(e.target.value)}
+            required
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            label="Course Name (Optional)"
+            fullWidth
+            value={courseName}
+            onChange={(e) => setCourseName(e.target.value)}
             sx={{ mb: 2 }}
           />
           <TextField
@@ -540,8 +615,16 @@ function Dashboard() {
             fullWidth
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            sx={{ mb: 3 }}
+            sx={{ mb: 2 }}
           />
+          {uploading && (
+            <Box sx={{ mb: 2 }}>
+              <LinearProgress variant="determinate" value={uploadProgress} />
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Uploading... {uploadProgress}%
+              </Typography>
+            </Box>
+          )}
 
           <Box sx={{ textAlign: "right" }}>
             <Button onClick={closeUploadModal} sx={{ mr: 1 }}>
@@ -550,12 +633,13 @@ function Dashboard() {
             <Button
               type="submit"
               variant="contained"
+              disabled={uploading}
               sx={{
                 background: "linear-gradient(90deg, #1976d2, #43a047)",
                 color: "white",
               }}
             >
-              Upload
+              {uploading ? "Uploading..." : "Upload"}
             </Button>
           </Box>
         </Box>
@@ -571,34 +655,15 @@ function Dashboard() {
                 {selectedNote.name}
               </Typography>
               <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
-                Course: {selectedNote.courseCode} • Uploaded: {selectedNote.uploadedAt.toLocaleString()}
+                Course: {selectedNote.courseCode || "N/A"} • Uploaded: {new Date(selectedNote.uploadedAt).toLocaleString()}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Size: {(selectedNote.size / 1024).toFixed(2)} KB • Type: {selectedNote.type}
               </Typography>
 
-              {selectedNote.type.startsWith("image/") && (
-                <Box sx={{ mb: 2 }}>
-                  <img
-                    src={selectedNote.preview}
-                    alt={selectedNote.name}
-                    style={{ width: "100%", maxHeight: 400, objectFit: "contain", borderRadius: 8 }}
-                  />
-                </Box>
-              )}
-
-              {selectedNote.type === "application/pdf" && (
-                <Box sx={{ mb: 2 }}>
-                  <iframe
-                    src={selectedNote.preview}
-                    title={selectedNote.name}
-                    style={{ width: "100%", height: 480, border: "none" }}
-                  />
-                </Box>
-              )}
-
-              {(!selectedNote.type.startsWith("image/") && selectedNote.type !== "application/pdf") && (
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  File preview not available for this type. Use download to save it locally.
-                </Typography>
-              )}
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                File preview not available. Use download to save and view the file locally.
+              </Typography>
 
               {selectedNote.description && (
                 <Typography variant="body1" sx={{ mb: 2 }}>
