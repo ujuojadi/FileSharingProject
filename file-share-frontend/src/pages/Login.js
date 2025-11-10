@@ -10,27 +10,28 @@ import {
   Link,
   Alert,
 } from "@mui/material";
-import { loginUser } from "../api";
+import { auth } from "../api";
 
 function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setIsLoading(true);
     
     try {
-      await loginUser(email, password);
+      const response = await auth.login({ username: email, password });
+      localStorage.setItem("token", response.data.access_token);
       navigate("/dashboard");
-    } catch (err) {
-      setError(err.message || "Login failed");
+    } catch (error) {
+      setError(error.response?.data?.detail || "Login failed. Please try again.");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -86,13 +87,13 @@ function Login() {
             color="primary" 
             sx={{ mt: 2 }} 
             type="submit"
-            disabled={loading}
+            disabled={isLoading}
           >
-            {loading ? "Logging in..." : "Login"}
+            {isLoading ? "Logging in..." : "Login"}
           </Button>
         </Box>
         <Typography variant="body2" sx={{ mt: 2 }}>
-          Don’t have an account?{" "}
+          Don't have an account?{" "}
           <Link component={RouterLink} to="/register" underline="hover">
             Register here
           </Link>

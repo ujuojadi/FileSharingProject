@@ -1,161 +1,151 @@
-// src/api.js
-const API_URL = "http://localhost:8000"; // FastAPI backend
+import axios from 'axios';
 
-// Token management
+// Create axios instance with default config
+const api = axios.create({
+    baseURL: (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/$/, ''),
+    headers: {
+        'Content-Type': 'application/json',
+    },
+});
+
+// Request interceptor to add auth token
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+// Response interceptor to handle errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401 && window.location.pathname !== '/login') {
+            // Handle unauthorized access
+            localStorage.removeItem('token');
+            window.location.href = '/login';
+        }
+        return Promise.reject(error);
+    }
+);
+
+// Token management helpers (for compatibility)
 export function getToken() {
-  return localStorage.getItem("access_token");
+    return localStorage.getItem('token');
 }
 
 export function setToken(token) {
-  localStorage.setItem("access_token", token);
+    localStorage.setItem('token', token);
 }
 
 export function removeToken() {
-  localStorage.removeItem("access_token");
+    localStorage.removeItem('token');
 }
 
-// Get auth headers
-function getAuthHeaders() {
-  const token = getToken();
-  const headers = { "Content-Type": "application/json" };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-  return headers;
-}
+// Auth endpoints
+export const auth = {
+    login: (credentials) => api.post('/auth/login', new URLSearchParams(credentials).toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    }),
+    register: (userData) => api.post('/auth/register', userData),
+    verifyEmail: (email) => api.post('/auth/verify', { email }),
+    logout: () => {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+    },
+};
 
-// Get auth headers for file uploads
-function getAuthHeadersMultipart() {
-  const token = getToken();
-  const headers = {};
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-  return headers;
+// User endpoints
+export const users = {
+    getProfile: () => api.get('/users/me'),
+    updateProfile: (data) => api.put('/users/me', data),
+    list: () => api.get('/users'),
+    getOne: (id) => api.get(`/users/${id}`),
+};
+
+// File endpoints
+export const files = {
+    upload: (file, metadata = {}) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (metadata.courseCode) formData.append('course_code', metadata.courseCode);
+        if (metadata.courseName) formData.append('course_name', metadata.courseName);
+        if (metadata.description) formData.append('description', metadata.description);
+        
+        return api.post('/files/upload', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
+    list: () => api.get('/files'),
+    getOne: (fileId) => api.get(`/files/${fileId}`),
+    download: (fileId) => api.get(`/files/${fileId}/download`, { responseType: 'blob' }),
+    delete: (fileId) => api.delete(`/files/${fileId}`),
+    search: (params) => api.get('/search/files', { params }),
+};
+
+// Groups endpoints
+export const groups = {
+    create: (data) => api.post('/groups', data),
+    list: () => api.get('/groups'),
+    getOne: (id) => api.get(`/groups/${id}`),
+    join: (groupId) => api.post(`/groups/${groupId}/join`),
+    getRecommendations: (groupId) => api.get(`/groups/${groupId}/recommendations`),
+};
+
+// Feedback endpoints
+export const feedback = {
+    submit: (data) => api.post('/feedback', data),
+    edit: (feedbackId, data) => api.patch(`/feedback/${feedbackId}`, data),
+    getForFile: (fileId) => api.get(`/feedback/${fileId}`),
+};
+
+// Compatibility exports for existing code
+export async function loginUser(email, password) {
+    const response = await auth.login({ username: email, password });
+    if (response.data.access_token) {
+        setToken(response.data.access_token);
+    }
+    return response.data;
 }
 
 export async function registerUser(data) {
-  const response = await fetch(`${API_URL}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Registration failed");
-  }
-  return response.json();
-}
-
-export async function loginUser(email, password) {
-  const formData = new URLSearchParams();
-  formData.append("username", email); // OAuth2 uses 'username' field
-  formData.append("password", password);
-  
-  const response = await fetch(`${API_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formData,
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Login failed");
-  }
-  const data = await response.json();
-  if (data.access_token) {
-    setToken(data.access_token);
-  }
-  return data;
+    const response = await auth.register(data);
+    return response.data;
 }
 
 export async function logout() {
-  removeToken();
+    auth.logout();
 }
 
 export async function getFiles() {
-  const response = await fetch(`${API_URL}/files/`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  });
-  if (!response.ok) {
-    if (response.status === 401) {
-      removeToken();
-      throw new Error("Unauthorized - please login again");
-    }
-    throw new Error("Failed to fetch files");
-  }
-  return response.json();
+    const response = await files.list();
+    return response.data;
 }
 
 export async function uploadNote(file, courseCode, courseName, description) {
-  const formData = new FormData();
-  formData.append("file", file);
-  if (courseCode) formData.append("course_code", courseCode);
-  if (courseName) formData.append("course_name", courseName);
-  if (description) formData.append("description", description);
-
-  const token = getToken();
-  const headers = getAuthHeadersMultipart();
-
-  const res = await fetch(`${API_URL}/files/upload`, {
-    method: "POST",
-    headers: headers,
-    body: formData,
-  });
-
-  if (!res.ok) {
-    if (res.status === 401) {
-      removeToken();
-      throw new Error("Unauthorized - please login again");
-    }
-    const error = await res.json();
-    throw new Error(error.detail || "Upload failed");
-  }
-  return res.json();
+    const response = await files.upload(file, { courseCode, courseName, description });
+    return response.data;
 }
 
 export async function downloadNote(fileId, filename) {
-  const token = getToken();
-  const headers = {};
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${API_URL}/files/${fileId}/download`, {
-    method: "GET",
-    headers: headers,
-  });
-
-  if (!res.ok) {
-    if (res.status === 401) {
-      removeToken();
-      throw new Error("Unauthorized - please login again");
-    }
-    throw new Error("Download failed");
-  }
-
-  const blob = await res.blob();
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.URL.revokeObjectURL(url);
+    const response = await files.download(fileId);
+    const blob = new Blob([response.data]);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
 }
 
 export async function getFileMeta(fileId) {
-  const response = await fetch(`${API_URL}/files/${fileId}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  });
-  if (!response.ok) {
-    if (response.status === 401) {
-      removeToken();
-      throw new Error("Unauthorized - please login again");
-    }
-    throw new Error("Failed to fetch file metadata");
-  }
-  return response.json();
+    const response = await files.getOne(fileId);
+    return response.data;
 }
+
+export default api;

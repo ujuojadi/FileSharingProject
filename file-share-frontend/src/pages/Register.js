@@ -10,34 +10,115 @@ import {
   Link,
   Alert,
 } from "@mui/material";
-import { registerUser, loginUser } from "../api";
+import { auth } from "../api";
 
 function Register() {
   const navigate = useNavigate();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setIsLoading(true);
     
     try {
-      await registerUser({
-        name: name,
-        email: email,
-        password: password,
+      // First check if the server is reachable
+      try {
+        await fetch('http://localhost:8000/health');
+      } catch (e) {
+        throw new Error('Server is not running. Please start the backend server first.');
+      }
+
+      const regRes = await auth.register(formData);
+      // Registration succeeded on server
+      console.log('Registration response', regRes.status, regRes.data);
+      // Attempt automatic login
+      try {
+        const response = await auth.login({
+          username: formData.email,
+          password: formData.password,
+        });
+        localStorage.setItem("token", response.data.access_token);
+        navigate("/dashboard");
+        return;
+      } catch (loginErr) {
+        // Login failed after registration — show a helpful message
+        setError(`Account created successfully, but couldn't log in automatically. Please try logging in manually.`);
+        navigate("/login");
+        return;
+      }
+    } catch (error) {
+      // Detailed error logging
+      console.error('Registration error:', {
+        error,
+        response: error.response?.data,
+        status: error.response?.status,
       });
-      // After registration, automatically login
-      await loginUser(email, password);
-      navigate("/dashboard");
-    } catch (err) {
-      setError(err.message || "Registration failed");
+      
+      // Check if this is a server connectivity error
+      if (error.message?.includes('Server is not running')) {
+        setError('Cannot connect to the server. Please ensure the backend server is running.');
+        return;
+      }
+
+      // Handle axios error responses
+      if (error.isAxiosError && error.response) {
+        const { status, data } = error.response;
+        const detail = data?.detail || '';
+        
+        switch (status) {
+          case 409:
+            setError("This email address is already registered. Please use a different email or try logging in.");
+            break;
+          case 422:
+            // Extract message from validation error object and make it user-friendly
+            let message;
+            if (Array.isArray(data.detail)) {
+              // If detail is an array, take the first error message
+              message = data.detail[0]?.msg || "Invalid input";
+            } else if (typeof data.detail === 'object') {
+              // If detail is an object, use its msg field
+              message = data.detail.msg || "Invalid input";
+            } else {
+              // Otherwise use the detail as is or a default message
+              message = data.detail || "Please check all fields are filled in correctly.";
+            }
+            // Make the message more user-friendly
+            message = message.replace("String", "Password");
+            setError(message);
+            break;
+          case 400:
+            if (detail.includes("must end with")) {
+              setError("Please use your institutional email address to register.");
+            } else {
+              setError(detail || "Please check your input and try again.");
+            }
+            break;
+          default:
+            setError(detail || "Registration failed. Please try again later.");
+        }
+      } else if (error.isAxiosError && !error.response) {
+        // Network error
+        setError("Cannot connect to the server. Please check that the backend is running at http://localhost:8000");
+      } else {
+        // Unexpected error
+        setError(error.message || "An unexpected error occurred. Please try again.");
+      }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -67,34 +148,40 @@ function Register() {
           </Alert>
         )}
         <Box component="form" onSubmit={handleRegister}>
-          <TextField 
-            fullWidth 
-            label="Name" 
-            margin="normal" 
+          <TextField
+            fullWidth
+            label="Name"
+            name="name"
+            margin="normal"
             variant="outlined"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={formData.name}
+            onChange={handleChange}
             required
           />
-          <TextField 
-            fullWidth 
-            label="Email" 
-            margin="normal" 
+          <TextField
+            fullWidth
+            label="Email"
+            name="email"
+            margin="normal"
             variant="outlined"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
             type="email"
+            value={formData.email}
+            onChange={handleChange}
+            required
+            helperText="Must be a valid email address ending with @ul.edu"
           />
           <TextField
             fullWidth
             label="Password"
+            name="password"
             margin="normal"
             variant="outlined"
             type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            value={formData.password}
+            onChange={handleChange}
             required
+            helperText="Password must have at least 8 characters"
+            inputProps={{ maxLength: 72 }}
           />
           <Button 
             fullWidth 
@@ -102,9 +189,9 @@ function Register() {
             color="primary" 
             sx={{ mt: 2 }} 
             type="submit"
-            disabled={loading}
+            disabled={isLoading}
           >
-            {loading ? "Registering..." : "Register"}
+            {isLoading ? "Registering..." : "Register"}
           </Button>
         </Box>
         <Typography variant="body2" sx={{ mt: 2 }}>

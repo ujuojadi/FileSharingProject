@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   AppBar,
   Toolbar,
@@ -27,18 +26,19 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Snackbar,
   Alert,
-  CircularProgress,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import StarIcon from "@mui/icons-material/Star";
 import GroupsIcon from "@mui/icons-material/Groups";
 import NoteIcon from "@mui/icons-material/Note";
-import { getFiles, uploadNote, downloadNote, getToken, logout } from "../api";
+import { files, groups, feedback, users, auth } from "../api";
 
 function Dashboard() {
-  const navigate = useNavigate();
+  // User state
+  const [user, setUser] = useState(null);
   const [tab, setTab] = useState(0);
 
   // Upload modal state
@@ -49,62 +49,56 @@ function Dashboard() {
   const [description, setDescription] = useState("");
 
   // Notes state
-  const [notes, setNotes] = useState([]); // all notes from backend
+  const [notes, setNotes] = useState([]); // all notes uploaded by the user (local)
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("date");
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
-
+  const [error, setError] = useState(null);
+  
   // Details dialog
   const [openDetails, setOpenDetails] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
 
-  // Check authentication on mount
-  useEffect(() => {
-    if (!getToken()) {
-      navigate("/login");
-      return;
-    }
-    fetchFiles();
-  }, [navigate]);
-
-  // Fetch files from backend
-  const fetchFiles = async () => {
-    try {
-      setLoading(true);
-      const files = await getFiles();
-      // Map backend file data to frontend format
-      const mappedFiles = files.map((file) => ({
-        id: file.id,
-        name: file.filename,
-        size: file.size_bytes,
-        courseCode: file.course_code || "",
-        courseName: file.course_name || "",
-        description: file.description || "",
-        uploadedAt: new Date(file.uploaded_at),
-        type: file.content_type || "application/octet-stream",
-        rating: "4.0", // Placeholder - can be fetched from feedback API
-        fileId: file.id, // Store backend file ID for downloads
-      }));
-      setNotes(mappedFiles);
-      setError("");
-    } catch (err) {
-      setError(err.message || "Failed to fetch files");
-      if (err.message.includes("Unauthorized")) {
-        navigate("/login");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const recommendedGroups = [
+    const recommendedGroups = [
     { id: 1, name: "CSCI 475 - Distributed Systems", members: 34 },
     { id: 2, name: "MATH 301 - Linear Algebra", members: 28 },
     { id: 3, name: "ENGL 202 - Technical Writing", members: 19 },
   ];
+
+  // Snackbar state
+  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
+
+  // Load user profile and files from backend
+  useEffect(() => {
+    const loadUserAndData = async () => {
+      try {
+        const userResponse = await users.getProfile();
+        setUser(userResponse.data);
+        
+        // Fetch files from backend
+        const filesResponse = await files.list();
+        const mappedFiles = filesResponse.data.map((file) => ({
+          id: file.id,
+          name: file.filename,
+          size: file.size_bytes,
+          courseCode: file.course_code || "",
+          courseName: file.course_name || "",
+          description: file.description || "",
+          uploadedAt: new Date(file.uploaded_at),
+          type: file.content_type || "application/octet-stream",
+          rating: "4.0",
+          fileId: file.id,
+        }));
+        setNotes(mappedFiles);
+      } catch (err) {
+        console.error("Failed to load initial data:", err);
+        setError("Failed to load data. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUserAndData();
+  }, []);
 
   // Tab handlers
   const handleTabChange = (_, newValue) => setTab(newValue);
@@ -119,67 +113,56 @@ function Dashboard() {
     setDescription("");
   };
 
-  // Handle file upload
+  // Handle file upload to backend
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
     if (!file || !courseCode) {
-      setError("Please choose a file and enter a course code.");
+      setSnackbar({
+        open: true,
+        message: "Please choose a file and enter a course code.",
+        severity: "error"
+      });
       return;
     }
 
     try {
-      setUploading(true);
-      setUploadProgress(0);
-      setError("");
-
-      // Simulate progress (since we don't have real progress tracking)
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 200);
-
-      // Upload file to backend
-      const uploadedFile = await uploadNote(file, courseCode, courseName, description);
-      setUploadProgress(100);
-      clearInterval(progressInterval);
-
+      setLoading(true);
+      const response = await files.upload(file, {
+        courseCode,
+        courseName,
+        description,
+      });
+      
       // Add uploaded file to the list
       const newNote = {
-        id: uploadedFile.id,
-        name: uploadedFile.filename,
-        size: uploadedFile.size_bytes,
-        courseCode: uploadedFile.course_code || "",
-        courseName: uploadedFile.course_name || "",
-        description: uploadedFile.description || "",
-        uploadedAt: new Date(uploadedFile.uploaded_at),
-        type: uploadedFile.content_type || "application/octet-stream",
+        id: response.data.id,
+        name: response.data.filename,
+        size: response.data.size_bytes,
+        courseCode: response.data.course_code || "",
+        courseName: response.data.course_name || "",
+        description: response.data.description || "",
+        uploadedAt: new Date(response.data.uploaded_at),
+        type: response.data.content_type || "application/octet-stream",
         rating: "4.0",
-        fileId: uploadedFile.id,
+        fileId: response.data.id,
       };
-
+      
       setNotes((prev) => [newNote, ...prev]);
       closeUploadModal();
-      setUploadProgress(0);
+      setSnackbar({
+        open: true,
+        message: "File uploaded successfully!",
+        severity: "success"
+      });
     } catch (err) {
-      setError(err.message || "Upload failed");
-      if (err.message.includes("Unauthorized")) {
-        navigate("/login");
-      }
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.detail || "Upload failed. Please try again.",
+        severity: "error"
+      });
     } finally {
-      setUploading(false);
-      setUploadProgress(0);
+      setLoading(false);
     }
-  };
-
-  // Handle logout
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
   };
 
   // Search + Sort derived array
@@ -187,24 +170,14 @@ function Dashboard() {
     .filter(
       (n) =>
         n.name.toLowerCase().includes(search.toLowerCase()) ||
-        (n.courseCode && n.courseCode.toLowerCase().includes(search.toLowerCase()))
+        n.courseCode.toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => {
       if (sortBy === "name") return a.name.localeCompare(b.name);
       if (sortBy === "size") return a.size - b.size;
-      if (sortBy === "date") return new Date(b.uploadedAt) - new Date(a.uploadedAt);
+      if (sortBy === "date") return b.uploadedAt - a.uploadedAt; // Date subtraction works
       return 0;
     });
-
-  // Generate preview URL for images/PDFs (for display only)
-  const getPreviewUrl = (note) => {
-    if (note.type && note.type.startsWith("image/")) {
-      // For images, we'd need to fetch from backend or use a blob
-      // For now, return null and handle in UI
-      return null;
-    }
-    return null;
-  };
 
   // Card click: show details
   const handleCardClick = (note) => {
@@ -217,16 +190,26 @@ function Dashboard() {
     setSelectedNote(null);
   };
 
-  // Handle file download
+  // Handle file download from backend
   const handleDownload = async (note) => {
     if (!note || !note.fileId) return;
     try {
-      await downloadNote(note.fileId, note.name);
+      const response = await files.download(note.fileId);
+      const blob = new Blob([response.data]);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = note.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err.message || "Download failed");
-      if (err.message.includes("Unauthorized")) {
-        navigate("/login");
-      }
+      setSnackbar({
+        open: true,
+        message: "Download failed. Please try again.",
+        severity: "error"
+      });
     }
   };
 
@@ -264,7 +247,7 @@ function Dashboard() {
                 </Typography>
 
                 <Typography variant="body2" color="text.secondary">
-                  {item.courseCode || "No course"}
+                  {item.courseCode}
                 </Typography>
 
                 {item.description && (
@@ -284,7 +267,7 @@ function Dashboard() {
 
                 {/* preview area */}
                 <Box sx={{ mt: 2, height: 160 }}>
-                  {/* Generic file icon for all files (preview would require additional API calls) */}
+                  {/* Generic file icon for all files */}
                   <Box
                     sx={{
                       width: "100%",
@@ -368,27 +351,28 @@ function Dashboard() {
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: "bold" }}>
             📚 NOTESHARE Dashboard
           </Typography>
-          <Button color="inherit" onClick={handleLogout}>
+          <Button 
+            color="inherit" 
+            onClick={async () => {
+              try {
+                await auth.logout();
+                window.location.href = "/login";
+              } catch (err) {
+                console.error("Logout failed:", err);
+                setSnackbar({
+                  open: true,
+                  message: "Logout failed. Please try again.",
+                  severity: "error"
+                });
+              }
+            }}
+          >
             Logout
           </Button>
         </Toolbar>
       </AppBar>
 
       <Container sx={{ mt: 4 }}>
-        {/* Error message */}
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
-            {error}
-          </Alert>
-        )}
-
-        {/* Loading indicator */}
-        {loading && (
-          <Box sx={{ display: "flex", justifyContent: "center", my: 4 }}>
-            <CircularProgress />
-          </Box>
-        )}
-
         {/* search + sort */}
         <Box sx={{ textAlign: "center", mb: 4 }}>
           <Typography variant="h5" fontWeight="bold" gutterBottom>
@@ -615,16 +599,8 @@ function Dashboard() {
             fullWidth
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            sx={{ mb: 2 }}
+            sx={{ mb: 3 }}
           />
-          {uploading && (
-            <Box sx={{ mb: 2 }}>
-              <LinearProgress variant="determinate" value={uploadProgress} />
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                Uploading... {uploadProgress}%
-              </Typography>
-            </Box>
-          )}
 
           <Box sx={{ textAlign: "right" }}>
             <Button onClick={closeUploadModal} sx={{ mr: 1 }}>
@@ -633,13 +609,12 @@ function Dashboard() {
             <Button
               type="submit"
               variant="contained"
-              disabled={uploading}
               sx={{
                 background: "linear-gradient(90deg, #1976d2, #43a047)",
                 color: "white",
               }}
             >
-              {uploading ? "Uploading..." : "Upload"}
+              Upload
             </Button>
           </Box>
         </Box>
@@ -655,7 +630,7 @@ function Dashboard() {
                 {selectedNote.name}
               </Typography>
               <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
-                Course: {selectedNote.courseCode || "N/A"} • Uploaded: {new Date(selectedNote.uploadedAt).toLocaleString()}
+                Course: {selectedNote.courseCode || "N/A"} {selectedNote.courseName ? `- ${selectedNote.courseName}` : ""} • Uploaded: {new Date(selectedNote.uploadedAt).toLocaleString()}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Size: {(selectedNote.size / 1024).toFixed(2)} KB • Type: {selectedNote.type}
@@ -686,6 +661,34 @@ function Dashboard() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
+      {/* Loading indicator */}
+      {loading && (
+        <LinearProgress
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 9999
+          }}
+        />
+      )}
     </Box>
   );
 }
