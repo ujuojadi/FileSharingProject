@@ -105,6 +105,7 @@ export const feedback = {
 // Compatibility exports for existing code
 export async function loginUser(email, password) {
     const response = await auth.login({ username: email, password });
+    // The auth.login already stores the token via interceptor, but we ensure it's set
     if (response.data.access_token) {
         setToken(response.data.access_token);
     }
