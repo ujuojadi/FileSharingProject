@@ -45,10 +45,10 @@ export function removeToken() {
 
 // Auth endpoints
 export const auth = {
-    login: (credentials) => api.post('/auth/login', new URLSearchParams(credentials).toString(), {
+    login: (credentials) => api.post('/login', new URLSearchParams(credentials).toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     }),
-    register: (userData) => api.post('/auth/register', userData),
+    register: (userData) => api.post('/register', userData),
     verifyEmail: (email) => api.post('/auth/verify', { email }),
     logout: () => {
         localStorage.removeItem('token');
@@ -58,8 +58,8 @@ export const auth = {
 
 // User endpoints
 export const users = {
-    getProfile: () => api.get('/users/me'),
-    updateProfile: (data) => api.put('/users/me', data),
+    getProfile: () => api.get('/me'),
+    updateProfile: (data) => api.put('/me', data),
     list: () => api.get('/users'),
     getOne: (id) => api.get(`/users/${id}`),
 };
