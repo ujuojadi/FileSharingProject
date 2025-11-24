@@ -51,8 +51,10 @@ function Dashboard() {
   // Notes state
   const [notes, setNotes] = useState([]); // all notes uploaded by the user (local)
   const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = search returned empty, [items] = search results
   const [sortBy, setSortBy] = useState("date");
   const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState(null);
   
   // Details dialog
@@ -68,6 +70,20 @@ function Dashboard() {
   // Snackbar state
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
 
+  // Helper function to map file data
+  const mapFileData = (file) => ({
+    id: file.id,
+    name: file.filename,
+    size: file.size_bytes,
+    courseCode: file.course_code || "",
+    courseName: file.course_name || "",
+    description: file.description || "",
+    uploadedAt: new Date(file.uploaded_at),
+    type: file.content_type || "application/octet-stream",
+    rating: "4.0",
+    fileId: file.id,
+  });
+
   // Load user profile and files from backend
   useEffect(() => {
     const loadUserAndData = async () => {
@@ -77,18 +93,7 @@ function Dashboard() {
         
         // Fetch files from backend
         const filesResponse = await files.list();
-        const mappedFiles = filesResponse.data.map((file) => ({
-          id: file.id,
-          name: file.filename,
-          size: file.size_bytes,
-          courseCode: file.course_code || "",
-          courseName: file.course_name || "",
-          description: file.description || "",
-          uploadedAt: new Date(file.uploaded_at),
-          type: file.content_type || "application/octet-stream",
-          rating: "4.0",
-          fileId: file.id,
-        }));
+        const mappedFiles = filesResponse.data.map(mapFileData);
         setNotes(mappedFiles);
       } catch (err) {
         console.error("Failed to load initial data:", err);
@@ -99,6 +104,37 @@ function Dashboard() {
     };
     loadUserAndData();
   }, []);
+
+  // Debounced search effect
+  useEffect(() => {
+    // If search is empty, clear search results and show all files
+    if (!search.trim()) {
+      setSearchResults(null);
+      return;
+    }
+
+    // Debounce search API call
+    const timeoutId = setTimeout(async () => {
+      try {
+        setSearchLoading(true);
+        const response = await files.search({ q: search.trim() });
+        const mappedResults = response.data.map(mapFileData);
+        setSearchResults(mappedResults);
+      } catch (err) {
+        console.error("Search failed:", err);
+        setSnackbar({
+          open: true,
+          message: "Search failed. Please try again.",
+          severity: "error"
+        });
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 500); // 500ms debounce delay
+
+    return () => clearTimeout(timeoutId);
+  }, [search]);
 
   // Tab handlers
   const handleTabChange = (_, newValue) => setTab(newValue);
@@ -165,19 +201,16 @@ function Dashboard() {
     }
   };
 
-  // Search + Sort derived array
-  const filtered = notes
-    .filter(
-      (n) =>
-        n.name.toLowerCase().includes(search.toLowerCase()) ||
-        n.courseCode.toLowerCase().includes(search.toLowerCase())
-    )
-    .sort((a, b) => {
-      if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "size") return a.size - b.size;
-      if (sortBy === "date") return b.uploadedAt - a.uploadedAt; // Date subtraction works
-      return 0;
-    });
+  // Get data to display: search results if searching, otherwise all notes
+  const dataToDisplay = searchResults !== null ? searchResults : notes;
+
+  // Sort the data
+  const filtered = [...dataToDisplay].sort((a, b) => {
+    if (sortBy === "name") return a.name.localeCompare(b.name);
+    if (sortBy === "size") return a.size - b.size;
+    if (sortBy === "date") return b.uploadedAt - a.uploadedAt; // Date subtraction works
+    return 0;
+  });
 
   // Card click: show details
   const handleCardClick = (note) => {
@@ -323,7 +356,9 @@ function Dashboard() {
             align="center"
             sx={{ width: "100%", mt: 4 }}
           >
-            No matching notes found.
+            {searchResults !== null && search.trim()
+              ? "No notes found matching your search."
+              : "No notes found."}
           </Typography>
         )}
       </Grid>
@@ -395,6 +430,7 @@ function Dashboard() {
                 width: 400,
                 borderRadius: 3,
                 px: 2,
+                position: "relative",
               }}
             >
               <SearchIcon sx={{ color: "text.secondary" }} />
@@ -406,7 +442,19 @@ function Dashboard() {
                 onChange={(e) => setSearch(e.target.value)}
                 InputProps={{ disableUnderline: true }}
                 sx={{ ml: 1 }}
+                disabled={searchLoading}
               />
+              {searchLoading && (
+                <LinearProgress
+                  sx={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 2,
+                  }}
+                />
+              )}
             </Paper>
 
             <FormControl
