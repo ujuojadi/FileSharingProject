@@ -62,13 +62,18 @@ func makeServer(listenAddr string, nodes ...string) *FileServer {
 
 // This starts the demo P2P network
 func startDemoNetwork() {
-	p2pListenAddr := getConfig("P2P_ADDR", *p2pAddr, ":3000")
+	p2pListenAddr := getConfig("P2P_ADDR", *p2pAddr, "")
 	bootstrapAddr := getConfig("BOOTSTRAP_NODE", *bootstrapNode, "")
 
 	var bootstrapNodes []string
-	if bootstrapAddr != "" {
-		bootstrapNodes = []string{bootstrapAddr}
+	// default to :3001 if not provided
+	if p2pListenAddr == "" {
+		p2pListenAddr = ":3001"
 	}
+	if bootstrapAddr == "" {
+		bootstrapAddr = ":3001"
+	}
+	bootstrapNodes = []string{bootstrapAddr}
 
 	s := makeServer(p2pListenAddr, bootstrapNodes...)
 	go func() {
