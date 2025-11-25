@@ -35,6 +35,7 @@ import StarIcon from "@mui/icons-material/Star";
 import GroupsIcon from "@mui/icons-material/Groups";
 import NoteIcon from "@mui/icons-material/Note";
 import { files, groups, feedback, users, auth } from "../api";
+import { useNavigate} from "react-router-dom"
 
 function Dashboard() {
   // User state
@@ -244,6 +245,12 @@ function Dashboard() {
         severity: "error"
       });
     }
+  };
+
+  // Create/Join Group button leads to groups page
+  const navigate = useNavigate();
+  const handleCreateJoinGroup = () => {
+    navigate('/groups');
   };
 
   // UI for rendering cards (keeps fixed height & truncation)
@@ -545,6 +552,7 @@ function Dashboard() {
                   background: "linear-gradient(90deg, #1976d2, #43a047)",
                   color: "white",
                 }}
+                onClick={handleCreateJoinGroup}
               >
                 Create / Join Group
               </Button>
