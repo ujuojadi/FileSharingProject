@@ -1,5 +1,5 @@
-import React from "react";
-import { Outlet, Link as RouterLink } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Outlet, Link as RouterLink, useLocation } from "react-router-dom";
 import {
   AppBar,
   Toolbar,
@@ -7,8 +7,18 @@ import {
   Button,
   Box,
 } from "@mui/material";
+import { auth } from "../api";
 
 function Layout() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    // Check if user is authenticated (has token)
+    const token = localStorage.getItem('token');
+    setIsAuthenticated(!!token);
+  }, [location]); // Update when route changes
+
   return (
     <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Navbar */}
@@ -20,15 +30,28 @@ function Layout() {
           >
             📚 NOTESHARE
           </Typography>
-          <Button component={RouterLink} to="/" color="primary">
-            Home
-          </Button>
-          <Button component={RouterLink} to="/login" color="primary">
-            Login
-          </Button>
-          <Button component={RouterLink} to="/register" color="primary">
-            Register
-          </Button>
+          {!isAuthenticated && (
+            <>
+              <Button component={RouterLink} to="/" color="primary">
+                Home
+              </Button>
+              <Button component={RouterLink} to="/login" color="primary">
+                Login
+              </Button>
+              <Button component={RouterLink} to="/register" color="primary">
+                Register
+              </Button>
+            </>
+          )}
+          {isAuthenticated && (
+            <Button 
+              component={RouterLink} 
+              to="/dashboard" 
+              color="primary"
+            >
+              Dashboard
+            </Button>
+          )}
         </Toolbar>
       </AppBar>
 
