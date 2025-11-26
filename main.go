@@ -605,6 +605,22 @@ func fileHandler(s *FileServer) http.HandlerFunc {
             
             w.WriteHeader(http.StatusCreated)
             w.Write([]byte("File stored successfully"))
+        } else if r.Method == http.MethodDelete {
+            // Delete file by key (for P2P client)
+            key := r.URL.Query().Get("key")
+            if key == "" {
+                http.Error(w, "key parameter required", http.StatusBadRequest)
+                return
+            }
+            
+            // Delete file from P2P network storage
+            if err := s.Delete(key); err != nil {
+                http.Error(w, "Failed to delete file: "+err.Error(), http.StatusNotFound)
+                return
+            }
+            
+            w.WriteHeader(http.StatusOK)
+            w.Write([]byte("File deleted successfully"))
         } else {
             http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         }

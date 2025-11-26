@@ -79,6 +79,16 @@ class P2PClient:
         if content:
             return io.BytesIO(content)
         return None
+    
+    async def delete_file(self, key: str) -> bool:
+        """Delete a file from the P2P network using the given key."""
+        try:
+            client = await self._get_client()
+            response = await client.delete(f"{self.base_url}/files?key={key}")
+            return response.status_code == 200 or response.status_code == 204
+        except Exception as e:
+            print(f"Error deleting file from P2P backend: {e}")
+            return False
 
 
 # Global instance

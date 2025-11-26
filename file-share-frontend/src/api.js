@@ -231,10 +231,18 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401 && window.location.pathname !== '/login') {
-            // Handle unauthorized access
-            localStorage.removeItem('token');
-            window.location.href = '/login';
+        // Only auto-logout on 401 for auth endpoints, not for other operations
+        // This prevents accidental logout during file operations
+        if (error.response?.status === 401) {
+            const isAuthEndpoint = error.config?.url?.includes('/auth/login') || 
+                                   error.config?.url?.includes('/auth/register');
+            
+            // If it's an auth endpoint failure, don't auto-logout (user is already on login/register)
+            // If it's another endpoint and we're not on login/register, logout
+            if (!isAuthEndpoint && window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+            }
         }
         return Promise.reject(error);
     }

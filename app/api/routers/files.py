@@ -105,3 +105,34 @@ async def download_file(
         media_type=meta.content_type,
         headers={"Content-Disposition": f'attachment; filename="{meta.filename}"'}
     )
+
+
+@router.delete("/{file_id}", status_code=204)
+async def delete_file(
+    file_id: UUID,
+    files_repo: FilesRepository = Depends(get_files_repo),
+    current_user: User = Depends(get_current_verified_user),
+):
+    """Delete a file from both FastAPI metadata and P2P network."""
+    meta = await files_repo.get(file_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Check if user owns the file (optional: allow admins to delete any file)
+    if meta.uploader_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only delete your own files")
+    
+    # Delete from P2P network first
+    p2p_client = get_p2p_client()
+    p2p_deleted = await p2p_client.delete_file(meta.stored_path)
+    
+    if not p2p_deleted:
+        # Log warning but continue with metadata deletion
+        print(f"Warning: Failed to delete file {file_id} from P2P network, but continuing with metadata deletion")
+    
+    # Delete metadata from repository
+    deleted = await files_repo.delete(file_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return None  # 204 No Content

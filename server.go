@@ -91,6 +91,23 @@ type MessageStoreFile struct {
 type MessageGetFile struct {
 	Key string
 }
+func (s *FileServer) Delete(key string) error {
+	// Delete file from local P2P storage
+	if !s.store.Has(key) {
+		return fmt.Errorf("file with key %s not found in local storage", key)
+	}
+	
+	// Delete from local storage
+	if err := s.store.Delete(key); err != nil {
+		return fmt.Errorf("failed to delete file: %v", err)
+	}
+	
+	// Broadcast deletion to peers (optional - for consistency)
+	// In a full implementation, you'd broadcast a delete message to peers
+	fmt.Printf("File (%s) deleted from local P2P storage\n", key)
+	return nil
+}
+
 func (s *FileServer) Get(key string) (io.Reader, error){
 	// Check local P2P node storage first
 	if s.store.Has(key){

@@ -36,6 +36,7 @@ import UploadFileIcon from "@mui/icons-material/UploadFile";
 import StarIcon from "@mui/icons-material/Star";
 import GroupsIcon from "@mui/icons-material/Groups";
 import NoteIcon from "@mui/icons-material/Note";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { files, groups, feedback, users, auth } from "../api";
 
 function Dashboard() {
@@ -449,6 +450,51 @@ const handleDownload = async (note) => {
   }
 };
 
+const handleDelete = async (note) => {
+  if (!note || !note.id) {
+    setSnackbar({
+      open: true,
+      message: "File ID is missing — cannot delete.",
+      severity: "error"
+    });
+    return;
+  }
+
+  // Confirm deletion
+  if (!window.confirm(`Are you sure you want to delete "${note.name}"? This action cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    setLoading(true);
+    // Delete from FastAPI - it handles P2P deletion internally
+    await files.delete(note.id);
+    
+    // Remove from local state
+    setNotes((prev) => prev.filter((n) => n.id !== note.id));
+    
+    // Close details dialog if open
+    if (openDetails && selectedNote?.id === note.id) {
+      handleCloseDetails();
+    }
+    
+    setSnackbar({
+      open: true,
+      message: "File deleted successfully!",
+      severity: "success"
+    });
+  } catch (err) {
+    console.error("Delete failed:", err);
+    setSnackbar({
+      open: true,
+      message: err.response?.data?.detail || "Delete failed. Please try again.",
+      severity: "error"
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
   // UI for rendering cards (keeps fixed height & truncation)
   const renderCards = (data) => {
     return (
@@ -538,17 +584,29 @@ const handleDownload = async (note) => {
                     {item.rating} / 5
                   </Typography>
                 </Box>
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={(ev) => {
-                    ev.stopPropagation(); // prevent opening details
-                    handleDownload(item);
-                    
-                  }}
-                >
-                  Download
-                </Button>
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={(ev) => {
+                      ev.stopPropagation(); // prevent opening details
+                      handleDelete(item);
+                    }}
+                    title="Delete file"
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={(ev) => {
+                      ev.stopPropagation(); // prevent opening details
+                      handleDownload(item);
+                    }}
+                  >
+                    Download
+                  </Button>
+                </Box>
               </CardActions>
             </Card>
           </Grid>
@@ -888,6 +946,14 @@ const handleDownload = async (note) => {
 
         <DialogActions>
           <Button onClick={handleCloseDetails}>Close</Button>
+          <Button
+            onClick={() => handleDelete(selectedNote)}
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteIcon />}
+          >
+            Delete
+          </Button>
           <Button
             variant="contained"
             onClick={() => {

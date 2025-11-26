@@ -41,3 +41,19 @@ class InMemoryFilesRepository:
     async def list_by_uploader(self, user_id: UUID) -> list[FileMeta]:
         ids = self._files_by_uploader.get(user_id, [])
         return [self._files_by_id[i] for i in ids]
+
+    async def delete(self, file_id: UUID) -> bool:
+        """Delete a file by ID. Returns True if deleted, False if not found."""
+        if file_id not in self._files_by_id:
+            return False
+        
+        meta = self._files_by_id[file_id]
+        # Remove from files_by_id
+        del self._files_by_id[file_id]
+        
+        # Remove from uploader's file list
+        uploader_files = self._files_by_uploader.get(meta.uploader_id, [])
+        if file_id in uploader_files:
+            uploader_files.remove(file_id)
+        
+        return True
