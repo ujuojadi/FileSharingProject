@@ -690,12 +690,34 @@ useEffect(() => {
       const fileUploaderId = file.uploaderId || file.uploader_id;
       return fileUploaderId === user.id;
     });
+  } else if (tab === 3) {
+    // "Top Rated" tab - filter by files with ratings and sort by average rating
+    dataToDisplay = dataToDisplay.filter((file) => {
+      // Only show files that have at least one rating
+      return fileRatings[file.id] && fileRatings[file.id].count > 0;
+    });
   }
-  // Tab 0 (All Notes) and Tab 3 (Top Rated) show all files
-  // Tab 2 (Groups) will be handled separately
+  // Tab 0 (All Notes) shows all files
+  // Tab 2 (Groups) is handled separately
 
   // Sort the data
-  const filtered = dataToDisplay.sort((a, b) => {
+  let filtered = dataToDisplay.sort((a, b) => {
+    if (tab === 3) {
+      // For Top Rated tab, sort by average rating (highest first)
+      const ratingA = fileRatings[a.id]?.average || 0;
+      const ratingB = fileRatings[b.id]?.average || 0;
+      if (ratingB !== ratingA) {
+        return ratingB - ratingA; // Higher rating first
+      }
+      // If ratings are equal, sort by number of ratings (more ratings = more reliable)
+      const countA = fileRatings[a.id]?.count || 0;
+      const countB = fileRatings[b.id]?.count || 0;
+      if (countB !== countA) {
+        return countB - countA; // More ratings first
+      }
+    }
+    
+    // Apply user's selected sort for other tabs
     if (sortBy === "name") return a.name.localeCompare(b.name);
     if (sortBy === "size") return a.size - b.size;
     if (sortBy === "date") return b.uploadedAt - a.uploadedAt;
@@ -1310,7 +1332,28 @@ const handleDelete = async (note) => {
               </Box>
             </Box>
           )}
-          {tab === 3 && renderCards(filtered)}
+          {tab === 3 && (
+            <Box>
+              {filtered.length === 0 ? (
+                <Box sx={{ textAlign: "center", py: 5 }}>
+                  <StarIcon sx={{ fontSize: 64, color: "#e0e0e0", mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No Rated Files Yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Files will appear here once they receive ratings from users.
+                  </Typography>
+                </Box>
+              ) : (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, px: 2 }}>
+                    Showing {filtered.length} top-rated file{filtered.length !== 1 ? 's' : ''} (sorted by highest average rating)
+                  </Typography>
+                  {renderCards(filtered)}
+                </>
+              )}
+            </Box>
+          )}
         </Paper>
       </Container>
 
