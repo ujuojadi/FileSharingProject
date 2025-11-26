@@ -10,7 +10,7 @@ import {
   Link,
   Alert,
 } from "@mui/material";
-import { auth } from "../api";
+import { auth, setToken } from "../api";
 
 function Login() {
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ function Login() {
     
     try {
       const response = await auth.login({ username: email, password });
-      localStorage.setItem("token", response.data.access_token);
+      setToken(response.data.access_token);
       navigate("/dashboard");
     } catch (error) {
       setError(error.response?.data?.detail || "Login failed. Please try again.");

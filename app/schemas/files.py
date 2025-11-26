@@ -16,10 +16,13 @@ class FileMetaBase(BaseModel):
 
 
 class FileMetaCreate(FileMetaBase):
-    stored_path: str
+    # stored_path is optional when storing file bytes in the DB
+    stored_path: str | None = None
+    # optional raw file bytes when storing contents directly in the database
+    data: bytes | None = None
 
 
 class FileMeta(FileMetaBase):
     id: UUID = Field(default_factory=uuid4)
-    stored_path: str
+    stored_path: str | None = None
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)

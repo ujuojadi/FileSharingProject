@@ -34,6 +34,12 @@ async def register(data: RegisterRequest, users_repo: UsersRepository = Depends(
     except ValueError as ex:
         # Likely a password/hash related error (e.g. bcrypt 72-byte limit)
         raise HTTPException(status_code=400, detail=str(ex)) from ex
+    # Automatically verify user on register (skip manual email confirmation)
+    try:
+        await users_repo.verify(user.id)
+    except Exception:
+        # ignore verification errors, still return created user
+        pass
     # Simulate sending verification email (log/print)
     print(f"[Email] Verification email sent to {user.email}")
     return UserPublic.model_validate(user)

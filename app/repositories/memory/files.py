@@ -41,3 +41,22 @@ class InMemoryFilesRepository:
     async def list_by_uploader(self, user_id: UUID) -> list[FileMeta]:
         ids = self._files_by_uploader.get(user_id, [])
         return [self._files_by_id[i] for i in ids]
+
+    async def get_data(self, file_id: UUID) -> Optional[bytes]:
+        # In-memory repo doesn't store raw bytes by default; return None
+        meta = self._files_by_id.get(file_id)
+        return None
+    
+    async def delete(self, file_id: UUID) -> bool:
+        meta = self._files_by_id.get(file_id)
+        if not meta:
+            return False
+        # remove from files dict
+        del self._files_by_id[file_id]
+        # remove from uploader map
+        uploader_list = self._files_by_uploader.get(meta.uploader_id, [])
+        try:
+            uploader_list.remove(file_id)
+        except ValueError:
+            pass
+        return True

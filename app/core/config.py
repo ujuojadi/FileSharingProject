@@ -30,13 +30,17 @@ class Settings(BaseSettings):
     
     # P2P Backend
     p2p_backend_url: str = "http://localhost:8081"
+    # Enable/disable attempting to upload/download via the Go P2P backend
+    p2p_enabled: bool = False
     
     # Database (async SQLAlchemy URL).
     # By default the project will attempt to use a local MySQL/MariaDB instance
     # for development. You can override this with NOTESHARE_DATABASE_URL or
     # provide legacy DB_* variables. If you prefer SQLite, set
     # NOTESHARE_DATABASE_URL=sqlite+aiosqlite:///./dev.db
-    database_url: str = "mysql+aiomysql://fileshare_user:your_db_password_here@127.0.0.1:3306/fileshare_db?charset=utf8mb4"
+    # Default changed to PostgreSQL (asyncpg driver) for easier free deployments.
+    # Example: postgresql+asyncpg://fileshare_user:password@127.0.0.1:5432/fileshare_db
+    database_url: str = "postgresql+asyncpg://fileshare_user:your_db_password_here@127.0.0.1:5432/fileshare_db"
 
 
 @lru_cache

@@ -5,6 +5,7 @@ from fastapi import Depends
 from app.repositories.interfaces import UsersRepository, FilesRepository, FeedbackRepository, GroupsRepository
 from app.repositories.memory.users import InMemoryUsersRepository
 from app.repositories.memory.files import InMemoryFilesRepository
+from app.repositories.sql.files import SQLFilesRepository
 from app.repositories.memory.feedback import InMemoryFeedbackRepository
 from app.repositories.memory.groups import InMemoryGroupsRepository
 from app.repositories.sql.users import SQLUsersRepository
@@ -29,6 +30,9 @@ def get_users_repo() -> UsersRepository:
 
 
 def get_files_repo() -> FilesRepository:
+    # Prefer SQL-backed files repository when a database URL is configured
+    if settings.database_url:
+        return SQLFilesRepository()
     return _files_repo
 
 

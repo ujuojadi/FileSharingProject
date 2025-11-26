@@ -10,7 +10,7 @@ import {
   Link,
   Alert,
 } from "@mui/material";
-import { auth } from "../api";
+import { auth, setToken } from "../api";
 
 function Register() {
   const navigate = useNavigate();
@@ -42,16 +42,23 @@ function Register() {
         throw new Error('Server is not running. Please start the backend server first.');
       }
 
-      const regRes = await auth.register(formData);
+      // Backend `UserCreate` schema expects `full_name`, so map `name` -> `full_name`
+      const payload = {
+        email: formData.email,
+        full_name: formData.name,
+        password: formData.password,
+      };
+
+      const regRes = await auth.register(payload);
       // Registration succeeded on server
       console.log('Registration response', regRes.status, regRes.data);
       // Attempt automatic login
-      try {
+        try {
         const response = await auth.login({
           username: formData.email,
           password: formData.password,
         });
-        localStorage.setItem("token", response.data.access_token);
+        setToken(response.data.access_token);
         navigate("/dashboard");
         return;
       } catch (loginErr) {

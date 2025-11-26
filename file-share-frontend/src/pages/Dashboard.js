@@ -50,7 +50,8 @@ function Dashboard() {
   const [description, setDescription] = useState("");
 
   // Notes state
-  const [notes, setNotes] = useState([]); // all notes uploaded by the user (local)
+  const [notes, setNotes] = useState([]); // all files
+  const [myNotes, setMyNotes] = useState([]); // current user's uploads
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = search returned empty, [items] = search results
   const [sortBy, setSortBy] = useState("date");
@@ -61,6 +62,9 @@ function Dashboard() {
   // Details dialog
   const [openDetails, setOpenDetails] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
+  // Delete confirmation dialog
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
 
     const recommendedGroups = [
     { id: 1, name: "CSCI 475 - Distributed Systems", members: 34 },
@@ -83,19 +87,60 @@ function Dashboard() {
     type: file.content_type || "application/octet-stream",
     rating: "4.0",
     fileId: file.id,
+    uploaderId: file.uploader_id,
+    preview: null,
   });
 
   // Load user profile and files from backend
   useEffect(() => {
     const loadUserAndData = async () => {
       try {
-        const userResponse = await users.getProfile();
-        setUser(userResponse.data);
-        
-        // Fetch files from backend
-        const filesResponse = await files.list();
-        const mappedFiles = filesResponse.data.map(mapFileData);
-        setNotes(mappedFiles);
+          const userResponse = await users.getProfile();
+          setUser(userResponse.data);
+
+          // Fetch all files and user's files
+          const [allResp, mineResp] = await Promise.all([files.list(), files.listMine()]);
+          const mappedAll = allResp.data.map(mapFileData);
+          const mappedMine = mineResp.data.map(mapFileData);
+          setNotes(mappedAll);
+          setMyNotes(mappedMine);
+
+          // Automatically fetch previews for the first set of image/pdf files (limit to avoid overload)
+          // We'll fetch previews for up to 12 files across the lists.
+          const toPreview = [];
+          for (const f of mappedMine) {
+            if (toPreview.length >= 12) break;
+            if (f.type.startsWith("image/") || f.type === "application/pdf") toPreview.push(f);
+          }
+          for (const f of mappedAll) {
+            if (toPreview.length >= 12) break;
+            // avoid duplicates already in mine
+            if (toPreview.find((t) => t.id === f.id)) continue;
+            if (f.type.startsWith("image/") || f.type === "application/pdf") toPreview.push(f);
+          }
+
+          // Fetch previews sequentially to be gentle on the server
+          const createdUrls = [];
+          for (const f of toPreview) {
+            try {
+              const resp = await files.download(f.fileId);
+              const blob = new Blob([resp.data], { type: f.type });
+              const url = window.URL.createObjectURL(blob);
+              createdUrls.push(url);
+              setNotes((prev) => prev.map((item) => (item.id === f.id ? { ...item, preview: url } : item)));
+              setMyNotes((prev) => prev.map((item) => (item.id === f.id ? { ...item, preview: url } : item)));
+            } catch (err) {
+              // ignore individual preview failures
+              console.debug("Preview fetch failed for", f.id, err);
+            }
+          }
+
+          // cleanup: revoke created object URLs when component unmounts
+          // we'll attach cleanup via a small timeout to allow setState to settle
+          setTimeout(() => {
+            // store createdUrls on window to revoke later if needed
+            (window.__notes_previews__ = window.__notes_previews__ || []).push(...createdUrls);
+          }, 0);
       } catch (err) {
         console.error("Failed to load initial data:", err);
         setError("Failed to load data. Please try again later.");
@@ -104,6 +149,21 @@ function Dashboard() {
       }
     };
     loadUserAndData();
+  }, []);
+
+  // Cleanup any created object URLs on unmount
+  useEffect(() => {
+    return () => {
+      const arr = window.__notes_previews__ || [];
+      arr.forEach((u) => {
+        try {
+          window.URL.revokeObjectURL(u);
+        } catch (e) {
+          // ignore
+        }
+      });
+      window.__notes_previews__ = [];
+    };
   }, []);
 
   // Debounced search effect
@@ -182,9 +242,11 @@ function Dashboard() {
         type: response.data.content_type || "application/octet-stream",
         rating: "4.0",
         fileId: response.data.id,
+        uploaderId: response.data.uploader_id,
       };
       
       setNotes((prev) => [newNote, ...prev]);
+      setMyNotes((prev) => [newNote, ...prev]);
       closeUploadModal();
       setSnackbar({
         open: true,
@@ -203,7 +265,7 @@ function Dashboard() {
   };
 
   // Get data to display: search results if searching, otherwise all notes
-  const dataToDisplay = searchResults !== null ? searchResults : notes;
+  const dataToDisplay = searchResults !== null ? searchResults : (tab === 1 ? myNotes : notes);
 
   // Sort the data
   const filtered = [...dataToDisplay].sort((a, b) => {
@@ -215,8 +277,36 @@ function Dashboard() {
 
   // Card click: show details
   const handleCardClick = (note) => {
-    setSelectedNote(note);
-    setOpenDetails(true);
+    const openWithPreview = async () => {
+      let noteWithPreview = note;
+      if (!note.preview && (note.type.startsWith("image/") || note.type === "application/pdf")) {
+        try {
+          const resp = await files.download(note.fileId);
+          const blob = new Blob([resp.data], { type: note.type });
+          const url = window.URL.createObjectURL(blob);
+          // persist on lists
+          setNotes((prev) => prev.map((f) => (f.id === note.id ? { ...f, preview: url } : f)));
+          setMyNotes((prev) => prev.map((f) => (f.id === note.id ? { ...f, preview: url } : f)));
+          (window.__notes_previews__ = window.__notes_previews__ || []).push(url);
+          noteWithPreview = { ...note, preview: url };
+        } catch (err) {
+          console.debug("Failed to load detail preview", err);
+        }
+      }
+      // Fetch uploader info for display (best-effort)
+      try {
+        if (noteWithPreview.uploaderId) {
+          const resp = await users.getOne(noteWithPreview.uploaderId);
+          const uploader = resp.data;
+          noteWithPreview = { ...noteWithPreview, uploaderName: uploader.full_name || uploader.email };
+        }
+      } catch (e) {
+        // ignore fetching uploader
+      }
+      setSelectedNote(noteWithPreview);
+      setOpenDetails(true);
+    };
+    openWithPreview();
   };
 
   const handleCloseDetails = () => {
@@ -307,24 +397,55 @@ function Dashboard() {
 
                 {/* preview area */}
                 <Box sx={{ mt: 2, height: 160 }}>
-                  {/* Generic file icon for all files */}
-                  <Box
-                    sx={{
-                      width: "100%",
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      bgcolor: "#f4f4f4",
-                      borderRadius: 1,
-                    }}
-                  >
-                    <UploadFileIcon sx={{ fontSize: 48, color: "#888" }} />
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                      {item.type.split("/")[1]?.toUpperCase() || "FILE"}
-                    </Typography>
-                  </Box>
+                  {item.preview ? (
+                    item.type.startsWith("image/") ? (
+                      <CardMedia
+                        component="img"
+                        image={item.preview}
+                        alt={item.name}
+                        sx={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 1 }}
+                      />
+                    ) : item.type === "application/pdf" ? (
+                      <iframe
+                        src={item.preview}
+                        title={item.name}
+                        style={{ width: "100%", height: "100%", border: "1px solid #eee", borderRadius: 8 }}
+                        onClick={(ev) => ev.stopPropagation()}
+                      />
+                    ) : (
+                      <Box sx={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#f4f4f4", borderRadius: 1 }}>
+                        <UploadFileIcon sx={{ fontSize: 48, color: "#888" }} />
+                      </Box>
+                    )
+                  ) : (
+                    // Lazy-load previews for images and PDFs
+                    (item.type.startsWith("image/") || item.type === "application/pdf") ? (
+                      <Box sx={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#f4f4f4", borderRadius: 1 }}>
+                        <Button
+                          variant="text"
+                          onClick={async (ev) => {
+                            ev.stopPropagation();
+                            try {
+                              const resp = await files.download(item.fileId);
+                              const blob = new Blob([resp.data], { type: item.type });
+                              const url = window.URL.createObjectURL(blob);
+                              // update state (notes or myNotes)
+                              setNotes((prev) => prev.map((f) => (f.id === item.id ? { ...f, preview: url } : f)));
+                              setMyNotes((prev) => prev.map((f) => (f.id === item.id ? { ...f, preview: url } : f)));
+                            } catch (err) {
+                              setSnackbar({ open: true, message: "Failed to load preview", severity: "error" });
+                            }
+                          }}
+                        >
+                          Load preview
+                        </Button>
+                      </Box>
+                    ) : (
+                      <Box sx={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#f4f4f4", borderRadius: 1 }}>
+                        <UploadFileIcon sx={{ fontSize: 48, color: "#888" }} />
+                      </Box>
+                    )
+                  )}
                 </Box>
 
                 {/* File info */}
@@ -391,9 +512,9 @@ function Dashboard() {
       >
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: "bold" }}>
-            📚 NOTESHARE Dashboard
+            Dashboard
           </Typography>
-          <Button 
+          {/* <Button 
             color="inherit" 
             onClick={async () => {
               try {
@@ -410,7 +531,7 @@ function Dashboard() {
             }}
           >
             Logout
-          </Button>
+          </Button> */}
         </Toolbar>
       </AppBar>
 
@@ -418,7 +539,7 @@ function Dashboard() {
         {/* search + sort */}
         <Box sx={{ textAlign: "center", mb: 4 }}>
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Welcome back, Student 👋
+            {`Welcome back, ${user?.full_name || user?.email || "Student"} 👋`}
           </Typography>
 
           <Box
@@ -689,12 +810,39 @@ function Dashboard() {
                 Course: {selectedNote.courseCode || "N/A"} {selectedNote.courseName ? `- ${selectedNote.courseName}` : ""} • Uploaded: {new Date(selectedNote.uploadedAt).toLocaleString()}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Size: {(selectedNote.size / 1024).toFixed(2)} KB • Type: {selectedNote.type}
+                Size: {(selectedNote.size / 1024).toFixed(2)} KB • Type: {selectedNote.type} • Uploaded by: {selectedNote.uploaderName || selectedNote.uploaderId || 'Unknown'}
               </Typography>
 
-              <Typography variant="body2" sx={{ mb: 2 }}>
-                File preview not available. Use download to save and view the file locally.
-              </Typography>
+              {/* Preview in details dialog (image or pdf) */}
+              {selectedNote.preview ? (
+                selectedNote.type.startsWith("image/") ? (
+                  <CardMedia
+                    component="img"
+                    image={selectedNote.preview}
+                    alt={selectedNote.name}
+                    sx={{ width: "100%", maxHeight: 480, objectFit: "contain", mb: 2 }}
+                  />
+                ) : selectedNote.type === "application/pdf" ? (
+                  <iframe
+                    src={selectedNote.preview}
+                    title={selectedNote.name}
+                    style={{ width: "100%", height: 480, border: "1px solid #eee", borderRadius: 8, marginBottom: 12 }}
+                  />
+                ) : (
+                  <Typography variant="body2" sx={{ mb: 2 }}>
+                    File preview not available. Use download to save and view the file locally.
+                  </Typography>
+                )
+              ) : (
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  File preview not available. Use download to save and view the file locally.
+                </Typography>
+              )}
+
+              {/* Uploaded by info
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Uploaded by: {selectedNote.uploaderName || selectedNote.uploaderId || 'Unknown'}
+              </Typography> */}
 
               {selectedNote.description && (
                 <Typography variant="body1" sx={{ mb: 2 }}>
@@ -706,17 +854,68 @@ function Dashboard() {
         </DialogContent>
 
         <DialogActions>
-          <Button onClick={handleCloseDetails}>Close</Button>
-          <Button
-            variant="contained"
-            onClick={() => {
-              handleDownload(selectedNote);
-            }}
-          >
-            Download
-          </Button>
+            <Button onClick={handleCloseDetails}>Close</Button>
+            {selectedNote && user && selectedNote.uploaderId === user.id && (
+              <Button
+                color="error"
+                onClick={() => {
+                  // open confirmation dialog
+                  setDeleteCandidate(selectedNote);
+                  setDeleteConfirmOpen(true);
+                }}
+              >
+                Delete
+              </Button>
+            )}
+            <Button
+              variant="contained"
+              onClick={() => {
+                handleDownload(selectedNote);
+              }}
+            >
+              Download
+            </Button>
         </DialogActions>
       </Dialog>
+
+        {/* Delete confirmation dialog */}
+        <Dialog
+          open={deleteConfirmOpen}
+          onClose={() => setDeleteConfirmOpen(false)}
+        >
+          <DialogTitle>Confirm Delete</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to permanently delete "{deleteCandidate?.name}"? This action cannot be undone.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button
+              color="error"
+              variant="contained"
+              onClick={async () => {
+                if (!deleteCandidate) return;
+                try {
+                  await files.delete(deleteCandidate.id);
+                  setNotes((prev) => prev.filter((f) => f.id !== deleteCandidate.id));
+                  setMyNotes((prev) => prev.filter((f) => f.id !== deleteCandidate.id));
+                  setSnackbar({ open: true, message: 'File deleted', severity: 'success' });
+                  setDeleteConfirmOpen(false);
+                  // If details dialog is open for the deleted file, close it
+                  if (selectedNote && selectedNote.id === deleteCandidate.id) {
+                    handleCloseDetails();
+                  }
+                } catch (err) {
+                  setSnackbar({ open: true, message: 'Failed to delete file', severity: 'error' });
+                  setDeleteConfirmOpen(false);
+                }
+              }}
+            >
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
 
       {/* Snackbar for notifications */}
       <Snackbar
