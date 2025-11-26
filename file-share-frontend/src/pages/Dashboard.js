@@ -399,17 +399,54 @@ useEffect(() => {
 // };
 
 
-const handleDownload = (note) => {
+const handleDownload = async (note) => {
   console.log("DOWNLOAD NOTE OBJECT:", note);
 
-  if (!note || !note.ID) {
-    console.error("❌ note.ID is missing:", note);
-    alert("File ID is missing — cannot download.");
+  if (!note || !note.id) {
+    console.error("❌ note.id is missing:", note);
+    setSnackbar({
+      open: true,
+      message: "File ID is missing — cannot download.",
+      severity: "error"
+    });
     return;
   }
 
-  // Redirect browser to Go download endpoint
-  window.location.href = `http://localhost:8080/files/download?id=${note.ID}`;
+  try {
+    setLoading(true);
+    // Download from FastAPI - it handles P2P retrieval internally
+    const response = await files.download(note.id);
+    
+    // Create blob from response data
+    const blob = new Blob([response.data], { type: note.type || "application/octet-stream" });
+    const url = window.URL.createObjectURL(blob);
+    
+    // Create download link
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = note.name || "download";
+    document.body.appendChild(link);
+    link.click();
+    
+    // Cleanup
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    setSnackbar({
+      open: true,
+      message: "File downloaded successfully!",
+      severity: "success"
+    });
+  } catch (err) {
+    console.error("Download failed:", err);
+    setSnackbar({
+      open: true,
+      message: err.response?.data?.detail || "Download failed. Please try again.",
+      severity: "error"
+    });
+  } finally {
+    setLoading(false);
+  }
 };
 
   // UI for rendering cards (keeps fixed height & truncation)

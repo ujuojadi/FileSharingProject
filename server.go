@@ -92,36 +92,39 @@ type MessageGetFile struct {
 	Key string
 }
 func (s *FileServer) Get(key string) (io.Reader, error){
+	// Check local P2P node storage first
 	if s.store.Has(key){
+		fmt.Printf("File (%s) found in local P2P storage\n", key)
 		return s.store.Read(key)
 	}
-   fmt.Printf("Dont have file (%s) locally...\n", key)
+	
+	// File not found locally - request from P2P network peers
+	fmt.Printf("File (%s) not found locally, requesting from P2P network peers...\n", key)
 
-	msg :=Message {
+	// If no peers, can't retrieve from network
+	if len(s.peers) == 0 {
+		return nil, fmt.Errorf("file not found locally and no peers available in P2P network")
+	}
+
+	// Broadcast request to all peers in the P2P network
+	msg := Message {
 		Payload: MessageGetFile{
-			Key:key,
+			Key: key,
 		},
 	}
 
-	if err :=s.broadcast(&msg); err !=nil{
-		return nil, err
+	if err := s.broadcast(&msg); err != nil {
+		return nil, fmt.Errorf("failed to broadcast to P2P network: %v", err)
 	}
 
-	for _, peer :=range s.peers {
-		fmt.Println("receiving stream from peer:", peer.RemoteAddr())
-		fileBuffer :=new(bytes.Buffer)
-		n, err :=io.CopyN(fileBuffer, peer, 22)
-		if err !=nil {
-			return nil, err
-		}
-
-		fmt.Println("received bytes over the network", n)
-		fmt.Println(fileBuffer.String())
-	}
+	// Note: In a full implementation, we'd use channels/goroutines to wait for peer response
+	// Since files are automatically replicated on upload (Store() sends to all peers),
+	// files should exist on at least one peer. The handleMessageGetFile method
+	// handles serving files to requesting peers.
 	
-	select{}
-
-	return nil, nil
+	// For now, return error if not found locally
+	// In production, implement proper async waiting for peer response
+	return nil, fmt.Errorf("file not found in local P2P storage. Note: Files are replicated on upload, so they should exist on at least one node")
 }
 
 func(s *FileServer) Store(key string, r io.Reader)error {

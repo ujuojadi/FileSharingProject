@@ -554,11 +554,26 @@ func indexFiles() ([]File, error) {
 
 
 
-// HTTP handler: handle /files endpoint (GET for list, POST for store by key)
+// HTTP handler: handle /files endpoint (GET for list/download, POST for store by key)
 func fileHandler(s *FileServer) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         if r.Method == http.MethodGet {
-            // List files
+            key := r.URL.Query().Get("key")
+            if key != "" {
+                // Download specific file by key (for P2P client)
+                reader, err := s.Get(key)
+                if err != nil {
+                    http.Error(w, "Failed to get file: "+err.Error(), http.StatusNotFound)
+                    return
+                }
+                
+                // Stream file content
+                w.Header().Set("Content-Type", "application/octet-stream")
+                io.Copy(w, reader)
+                return
+            }
+            
+            // List all files (no key parameter)
             files, err := indexFiles()
             if err != nil {
                 http.Error(w, "Failed to scan files", http.StatusInternalServerError)
