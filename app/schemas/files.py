@@ -13,6 +13,7 @@ class FileMetaBase(BaseModel):
     course_code: str | None = None
     course_name: str | None = None
     description: str | None = None
+    group_id: UUID | None = None
 
 
 class FileMetaCreate(FileMetaBase):

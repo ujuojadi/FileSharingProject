@@ -40,3 +40,11 @@ class InMemoryFeedbackRepository:
             return None
         total = sum(f.rating for f in items)
         return total / len(items)
+
+    async def get_by_user_and_file(self, user_id: UUID, file_id: UUID) -> Optional[Feedback]:
+        """Get feedback by a specific user for a specific file"""
+        items = await self.list_for_file(file_id)
+        for item in items:
+            if item.user_id == user_id:
+                return item
+        return None

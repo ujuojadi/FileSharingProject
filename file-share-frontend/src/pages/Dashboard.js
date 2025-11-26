@@ -50,6 +50,7 @@ function Dashboard() {
   const [courseCode, setCourseCode] = useState("");
   const [courseName, setCourseName] = useState("");
   const [description, setDescription] = useState("");
+  const [selectedGroupId, setSelectedGroupId] = useState("");
 
   // Notes state
   const [notes, setNotes] = useState([]); // all notes uploaded by the user (local)
@@ -63,6 +64,17 @@ function Dashboard() {
   // Details dialog
   const [openDetails, setOpenDetails] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
+
+  // Rating state
+  const [fileRatings, setFileRatings] = useState({}); // { fileId: { average: number, count: number } }
+  const [myRatings, setMyRatings] = useState({}); // { fileId: rating }
+  const [openRatingModal, setOpenRatingModal] = useState(false);
+  const [ratingFile, setRatingFile] = useState(null);
+  const [selectedRating, setSelectedRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState("");
 
   // Groups state
   const [allGroups, setAllGroups] = useState([]);
@@ -72,6 +84,8 @@ function Dashboard() {
   const [openGroupModal, setOpenGroupModal] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [groupDescription, setGroupDescription] = useState("");
+  const [selectedGroupForFiles, setSelectedGroupForFiles] = useState(null);
+  const [groupFiles, setGroupFiles] = useState([]);
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
@@ -255,13 +269,47 @@ useEffect(() => {
         description: file.description || "",
         uploadedAt: new Date(file.uploaded_at),
         type: file.content_type || "application/octet-stream",
-        rating: "4.0",
+        rating: 0, // Will be loaded from ratings
         fileId: file.id,
         uploaderId: file.uploader_id, // Preserve uploader_id for filtering
       }));
 
       console.log("Loaded files from FastAPI:", mappedFiles);
       setNotes(mappedFiles);
+
+      // Load ratings for all files
+      const ratingsPromises = mappedFiles.map(async (file) => {
+        try {
+          const avgResponse = await feedback.getAverage(file.id);
+          const myRatingResponse = await feedback.getMyRating(file.id);
+          return {
+            fileId: file.id,
+            average: avgResponse.data?.average || 0,
+            count: avgResponse.data?.count || 0,
+            myRating: myRatingResponse.data?.rating || null,
+          };
+        } catch (err) {
+          console.error(`Failed to load rating for file ${file.id}:`, err);
+          return {
+            fileId: file.id,
+            average: 0,
+            count: 0,
+            myRating: null,
+          };
+        }
+      });
+
+      const ratingsResults = await Promise.all(ratingsPromises);
+      const ratingsMap = {};
+      const myRatingsMap = {};
+      ratingsResults.forEach((result) => {
+        ratingsMap[result.fileId] = { average: result.average, count: result.count };
+        if (result.myRating !== null) {
+          myRatingsMap[result.fileId] = result.myRating;
+        }
+      });
+      setFileRatings(ratingsMap);
+      setMyRatings(myRatingsMap);
 
     } catch (err) {
       console.error("Failed to load files:", err);
@@ -339,10 +387,11 @@ useEffect(() => {
     setCourseCode("");
     setCourseName("");
     setDescription("");
+    setSelectedGroupId("");
   };
 
   // Group modal handlers
-  const openGroupModal = () => setOpenGroupModal(true);
+  const handleOpenGroupModal = () => setOpenGroupModal(true);
   const closeGroupModal = () => {
     setOpenGroupModal(false);
     setGroupName("");
@@ -439,6 +488,119 @@ useEffect(() => {
     return myGroups.some(g => g.id === groupId);
   };
 
+  // Handle viewing files in a group
+  const handleViewGroupFiles = async (group) => {
+    try {
+      setSelectedGroupForFiles(group);
+      setGroupsLoading(true);
+      const response = await files.list({ group_id: group.id });
+      const data = response.data || [];
+      
+      // Map FastAPI FileMeta to frontend format
+      const mappedFiles = data.map(file => ({
+        id: file.id,
+        name: file.filename,
+        size: file.size_bytes,
+        courseCode: file.course_code || "",
+        courseName: file.course_name || "",
+        description: file.description || "",
+        uploadedAt: new Date(file.uploaded_at),
+        type: file.content_type || "application/octet-stream",
+        rating: "4.0",
+        fileId: file.id,
+        uploaderId: file.uploader_id,
+      }));
+      
+      setGroupFiles(mappedFiles);
+    } catch (err) {
+      console.error("Failed to load group files:", err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.detail || "Failed to load group files. Please try again.",
+        severity: "error"
+      });
+      setGroupFiles([]);
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
+
+  const handleCloseGroupFiles = () => {
+    setSelectedGroupForFiles(null);
+    setGroupFiles([]);
+  };
+
+  // Rating handlers
+  const handleOpenRatingModal = (file) => {
+    setRatingFile(file);
+    setSelectedRating(myRatings[file.id] || 0);
+    setRatingComment("");
+    setOpenRatingModal(true);
+  };
+
+  const handleCloseRatingModal = () => {
+    setOpenRatingModal(false);
+    setRatingFile(null);
+    setSelectedRating(0);
+    setRatingComment("");
+  };
+
+  const handleSubmitRating = async () => {
+    if (!ratingFile || selectedRating === 0) {
+      setSnackbar({
+        open: true,
+        message: "Please select a rating (1-5 stars).",
+        severity: "error"
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await feedback.submit({
+        file_id: ratingFile.id,
+        user_id: user.id, // Will be overridden by backend
+        rating: selectedRating,
+        comment: ratingComment.trim() || null,
+      });
+
+      setSnackbar({
+        open: true,
+        message: "Rating submitted successfully!",
+        severity: "success"
+      });
+
+      // Reload ratings
+      const avgResponse = await feedback.getAverage(ratingFile.id);
+      const myRatingResponse = await feedback.getMyRating(ratingFile.id);
+      
+      setFileRatings(prev => ({
+        ...prev,
+        [ratingFile.id]: {
+          average: avgResponse.data?.average || 0,
+          count: avgResponse.data?.count || 0,
+        }
+      }));
+
+      if (myRatingResponse.data?.rating) {
+        setMyRatings(prev => ({
+          ...prev,
+          [ratingFile.id]: myRatingResponse.data.rating
+        }));
+      }
+
+      handleCloseRatingModal();
+    } catch (err) {
+      console.error("Failed to submit rating:", err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.detail || "Failed to submit rating. Please try again.",
+        severity: "error"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   //STARY THERE
   // Handle file upload to backend
@@ -461,6 +623,7 @@ useEffect(() => {
       courseCode,
       courseName,
       description,
+      groupId: selectedGroupId || null,
     });
 
     // Map FastAPI response to frontend format
@@ -540,15 +703,61 @@ useEffect(() => {
   });
 
 
-  // Card click: show details
-  const handleCardClick = (note) => {
-    setSelectedNote(note);
+  // Card click: show details and load preview
+  const handleCardClick = async (item) => {
+    setSelectedNote(item);
     setOpenDetails(true);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    
+    // Try to load file preview for viewable file types
+    const viewableTypes = [
+      'text/plain', 'text/csv', 'text/html', 'text/css', 'text/javascript',
+      'application/json', 'application/pdf',
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'application/xml', 'text/xml'
+    ];
+    
+    const canPreview = viewableTypes.some(type => item.type?.includes(type.split('/')[1]) || item.name.match(/\.(txt|csv|json|pdf|jpg|jpeg|png|gif|html|css|js|xml)$/i));
+    
+    if (canPreview) {
+      try {
+        const response = await files.download(item.id);
+        const blob = new Blob([response.data], { type: item.type || "application/octet-stream" });
+        
+        if (item.type?.startsWith('image/')) {
+          // For images, create object URL
+          const url = URL.createObjectURL(blob);
+          setFilePreview({ type: 'image', url });
+        } else if (item.type === 'application/pdf') {
+          // For PDFs, create object URL
+          const url = URL.createObjectURL(blob);
+          setFilePreview({ type: 'pdf', url });
+        } else if (item.type?.startsWith('text/') || item.type === 'application/json' || item.type === 'application/xml' || item.type === 'text/xml') {
+          // For text files, read as text
+          const text = await blob.text();
+          setFilePreview({ type: 'text', content: text });
+        } else {
+          setFilePreview({ type: 'unsupported' });
+        }
+      } catch (err) {
+        console.error("Failed to load file preview:", err);
+        setPreviewError("Could not load file preview. You can still download the file.");
+        setFilePreview({ type: 'error' });
+      } finally {
+        setPreviewLoading(false);
+      }
+    } else {
+      setPreviewLoading(false);
+      setFilePreview({ type: 'unsupported' });
+    }
   };
 
   const handleCloseDetails = () => {
     setOpenDetails(false);
     setSelectedNote(null);
+    setFilePreview(null);
+    setPreviewError(null);
   };
 
 
@@ -761,7 +970,12 @@ const handleDelete = async (note) => {
                 <Box sx={{ display: "flex", alignItems: "center" }}>
                   <StarIcon sx={{ color: "#ffb400", fontSize: 18 }} />
                   <Typography variant="body2" sx={{ ml: 0.5 }}>
-                    {item.rating} / 5
+                    {fileRatings[item.id]?.average?.toFixed(1) || "0.0"} / 5
+                    {fileRatings[item.id]?.count > 0 && (
+                      <Typography component="span" variant="caption" sx={{ ml: 0.5, color: "text.secondary" }}>
+                        ({fileRatings[item.id].count})
+                      </Typography>
+                    )}
                   </Typography>
                 </Box>
                 <Box sx={{ display: "flex", gap: 1 }}>
@@ -981,7 +1195,7 @@ const handleDelete = async (note) => {
                 <Button
                   variant="contained"
                   startIcon={<GroupsIcon />}
-                  onClick={openGroupModal}
+                  onClick={handleOpenGroupModal}
                   sx={{
                     mb: 2,
                     background: "linear-gradient(90deg, #1976d2, #43a047)",
@@ -1062,20 +1276,31 @@ const handleDelete = async (note) => {
                             <Typography variant="body2" color="text.secondary">
                               {groupMemberCounts[group.id] || 0} member{groupMemberCounts[group.id] !== 1 ? 's' : ''}
                             </Typography>
-                            <Button
-                              variant={isMember ? "outlined" : "contained"}
-                              size="small"
-                              onClick={() => !isMember && handleJoinGroup(group.id)}
-                              disabled={isMember}
-                              sx={{
-                                mt: 1,
-                                ...(isMember
-                                  ? { color: "#43a047", borderColor: "#43a047" }
-                                  : { background: "#1976d2", color: "white" }),
-                              }}
-                            >
-                              {isMember ? "Already a Member" : "Join Group"}
-                            </Button>
+                            <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
+                              <Button
+                                variant={isMember ? "outlined" : "contained"}
+                                size="small"
+                                onClick={() => !isMember && handleJoinGroup(group.id)}
+                                disabled={isMember}
+                                sx={{
+                                  ...(isMember
+                                    ? { color: "#43a047", borderColor: "#43a047" }
+                                    : { background: "#1976d2", color: "white" }),
+                                }}
+                              >
+                                {isMember ? "Member" : "Join Group"}
+                              </Button>
+                              {isMember && (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={() => handleViewGroupFiles(group)}
+                                  sx={{ color: "#1976d2", borderColor: "#1976d2" }}
+                                >
+                                  View Files
+                                </Button>
+                              )}
+                            </Box>
                           </Card>
                         </Grid>
                       );
@@ -1157,8 +1382,26 @@ const handleDelete = async (note) => {
             fullWidth
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            sx={{ mb: 3 }}
+            sx={{ mb: 2 }}
           />
+          
+          <FormControl fullWidth sx={{ mb: 3 }}>
+            <InputLabel>Upload to Group (Optional)</InputLabel>
+            <Select
+              value={selectedGroupId}
+              onChange={(e) => setSelectedGroupId(e.target.value)}
+              label="Upload to Group (Optional)"
+            >
+              <MenuItem value="">
+                <em>No Group</em>
+              </MenuItem>
+              {myGroups.map((group) => (
+                <MenuItem key={group.id} value={group.id}>
+                  {group.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           <Box sx={{ textAlign: "right" }}>
             <Button onClick={closeUploadModal} sx={{ mr: 1 }}>
@@ -1179,35 +1422,177 @@ const handleDelete = async (note) => {
       </Modal>
 
       {/* Details Dialog */}
-      <Dialog open={openDetails} onClose={handleCloseDetails} maxWidth="md" fullWidth>
-        <DialogTitle>File Details</DialogTitle>
-        <DialogContent dividers>
+      <Dialog open={openDetails} onClose={handleCloseDetails} maxWidth="lg" fullWidth maxHeight="90vh">
+        <DialogTitle>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Typography variant="h5" noWrap sx={{ flex: 1, mr: 2 }}>
+              {selectedNote?.name}
+            </Typography>
+            <IconButton onClick={handleCloseDetails} size="small">
+              <Typography variant="h6">×</Typography>
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers sx={{ maxHeight: "70vh", overflow: "auto" }}>
           {selectedNote && (
             <>
-              <Typography variant="h6" noWrap sx={{ mb: 1 }}>
-                {selectedNote.name}
-              </Typography>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
-                Course: {selectedNote.courseCode || "N/A"} {selectedNote.courseName ? `- ${selectedNote.courseName}` : ""} • Uploaded: {new Date(selectedNote.uploadedAt).toLocaleString()}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Size: {(selectedNote.size / 1024).toFixed(2)} KB • Type: {selectedNote.type}
-              </Typography>
-
-              <Typography variant="body2" sx={{ mb: 2 }}>
-                File preview not available. Use download to save and view the file locally.
-              </Typography>
-
-              {selectedNote.description && (
-                <Typography variant="body1" sx={{ mb: 2 }}>
-                  {selectedNote.description}
+              {/* File Information */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                  <strong>Course:</strong> {selectedNote.courseCode || "N/A"} {selectedNote.courseName ? `- ${selectedNote.courseName}` : ""}
                 </Typography>
-              )}
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  <strong>Uploaded:</strong> {new Date(selectedNote.uploadedAt).toLocaleString()}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  <strong>Size:</strong> {(selectedNote.size / 1024).toFixed(2)} KB • <strong>Type:</strong> {selectedNote.type}
+                </Typography>
+                {selectedNote.description && (
+                  <Typography variant="body1" sx={{ mt: 2, p: 2, bgcolor: "rgba(0,0,0,0.05)", borderRadius: 1 }}>
+                    <strong>Description:</strong> {selectedNote.description}
+                  </Typography>
+                )}
+              </Box>
+
+              {/* File Preview Section */}
+              <Box sx={{ mb: 3, border: "1px solid #e0e0e0", borderRadius: 2, p: 2, bgcolor: "#fafafa" }}>
+                <Typography variant="h6" gutterBottom>
+                  File Preview
+                </Typography>
+                {previewLoading ? (
+                  <Box sx={{ textAlign: "center", py: 4 }}>
+                    <LinearProgress />
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                      Loading file preview...
+                    </Typography>
+                  </Box>
+                ) : previewError ? (
+                  <Box sx={{ textAlign: "center", py: 2 }}>
+                    <Typography variant="body2" color="error">
+                      {previewError}
+                    </Typography>
+                  </Box>
+                ) : filePreview?.type === 'image' ? (
+                  <Box sx={{ textAlign: "center" }}>
+                    <img 
+                      src={filePreview.url} 
+                      alt={selectedNote.name}
+                      style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: 4 }}
+                      onLoad={() => URL.revokeObjectURL(filePreview.url)}
+                    />
+                  </Box>
+                ) : filePreview?.type === 'pdf' ? (
+                  <Box sx={{ textAlign: "center" }}>
+                    <iframe
+                      src={filePreview.url}
+                      width="100%"
+                      height="500px"
+                      style={{ border: "none", borderRadius: 4 }}
+                      title={selectedNote.name}
+                    />
+                  </Box>
+                ) : filePreview?.type === 'text' ? (
+                  <Box sx={{ 
+                    bgcolor: "white", 
+                    p: 2, 
+                    borderRadius: 1, 
+                    maxHeight: "400px", 
+                    overflow: "auto",
+                    fontFamily: "monospace",
+                    fontSize: "0.875rem"
+                  }}>
+                    <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      {filePreview.content}
+                    </pre>
+                  </Box>
+                ) : filePreview?.type === 'unsupported' || !filePreview ? (
+                  <Box sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Preview not available for this file type. Download the file to view it.
+                    </Typography>
+                  </Box>
+                ) : null}
+              </Box>
+
+              {/* Rate Usefulness Section */}
+              <Box sx={{ 
+                mb: 2, 
+                p: 3, 
+                bgcolor: "rgba(255, 184, 0, 0.1)", 
+                borderRadius: 2, 
+                border: "2px solid #ffb400"
+              }}>
+                <Typography variant="h6" gutterBottom sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <StarIcon sx={{ color: "#ffb400" }} />
+                  Rate How Useful This File Was
+                </Typography>
+                
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2, mt: 2 }}>
+                  <Box sx={{ display: "flex", gap: 0.5 }}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <IconButton
+                        key={star}
+                        onClick={() => {
+                          setRatingFile(selectedNote);
+                          setSelectedRating(myRatings[selectedNote.id] || star);
+                          setRatingComment("");
+                          setOpenRatingModal(true);
+                        }}
+                        sx={{ p: 0.5 }}
+                        title={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                      >
+                        <StarIcon
+                          sx={{
+                            fontSize: 32,
+                            color: star <= (myRatings[selectedNote.id] || 0) ? "#ffb400" : "#e0e0e0",
+                            transition: "color 0.2s",
+                          }}
+                        />
+                      </IconButton>
+                    ))}
+                  </Box>
+                  <Box>
+                    {fileRatings[selectedNote.id] && fileRatings[selectedNote.id].count > 0 ? (
+                      <Typography variant="body1">
+                        <strong>Average:</strong> {fileRatings[selectedNote.id].average.toFixed(1)} / 5 
+                        ({fileRatings[selectedNote.id].count} {fileRatings[selectedNote.id].count === 1 ? 'rating' : 'ratings'})
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No ratings yet. Be the first to rate!
+                      </Typography>
+                    )}
+                    {myRatings[selectedNote.id] && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        Your rating: {myRatings[selectedNote.id]} / 5
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+                
+                <Button
+                  variant="outlined"
+                  startIcon={<StarIcon />}
+                  onClick={() => {
+                    setRatingFile(selectedNote);
+                    setSelectedRating(myRatings[selectedNote.id] || 0);
+                    setRatingComment("");
+                    setOpenRatingModal(true);
+                  }}
+                  sx={{ 
+                    borderColor: "#ffb400", 
+                    color: "#ffb400",
+                    "&:hover": { borderColor: "#ffb400", bgcolor: "rgba(255, 184, 0, 0.1)" }
+                  }}
+                >
+                  {myRatings[selectedNote.id] ? "Update Your Rating" : "Rate This File"}
+                </Button>
+              </Box>
             </>
           )}
         </DialogContent>
 
-        <DialogActions>
+        <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={handleCloseDetails}>Close</Button>
           <Button
             onClick={() => handleDelete(selectedNote)}
@@ -1222,6 +1607,7 @@ const handleDelete = async (note) => {
             onClick={() => {
               handleDownload(selectedNote);
             }}
+            startIcon={<UploadFileIcon />}
           >
             Download
           </Button>
@@ -1275,6 +1661,124 @@ const handleDelete = async (note) => {
           </form>
         </Box>
       </Modal>
+
+      {/* Group Files Dialog */}
+      <Dialog open={selectedGroupForFiles !== null} onClose={handleCloseGroupFiles} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Files in {selectedGroupForFiles?.name}
+          <Button
+            variant="contained"
+            startIcon={<UploadFileIcon />}
+            onClick={() => {
+              handleCloseGroupFiles();
+              setSelectedGroupId(selectedGroupForFiles?.id || "");
+              setOpenUpload(true);
+            }}
+            sx={{
+              ml: 2,
+              background: "linear-gradient(90deg, #1976d2, #43a047)",
+              color: "white",
+            }}
+            size="small"
+          >
+            Upload to Group
+          </Button>
+        </DialogTitle>
+        <DialogContent dividers>
+          {groupsLoading ? (
+            <Box sx={{ textAlign: "center", py: 3 }}>
+              <LinearProgress />
+            </Box>
+          ) : groupFiles.length === 0 ? (
+            <Typography variant="body1" color="text.secondary" sx={{ textAlign: "center", py: 5 }}>
+              No files uploaded to this group yet.
+            </Typography>
+          ) : (
+            <Grid container spacing={2}>
+              {groupFiles.map((file) => (
+                <Grid item xs={12} sm={6} md={4} key={file.id}>
+                  <Card sx={{ borderRadius: 2, boxShadow: 1, p: 2 }}>
+                    <Typography variant="subtitle2" fontWeight="bold" noWrap>
+                      {file.name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {(file.size / 1024).toFixed(2)} KB
+                    </Typography>
+                    <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => handleDownload(file)}
+                      >
+                        Download
+                      </Button>
+                    </Box>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseGroupFiles}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Rating Modal */}
+      <Dialog open={openRatingModal} onClose={handleCloseRatingModal} maxWidth="sm" fullWidth>
+        <DialogTitle>Rate {ratingFile?.name}</DialogTitle>
+        <DialogContent dividers>
+          <Box sx={{ textAlign: "center", py: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Your Rating
+            </Typography>
+            <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5, mb: 2 }}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <IconButton
+                  key={star}
+                  onClick={() => setSelectedRating(star)}
+                  sx={{ p: 0.5 }}
+                >
+                  <StarIcon
+                    sx={{
+                      fontSize: 40,
+                      color: star <= selectedRating ? "#ffb400" : "#e0e0e0",
+                      transition: "color 0.2s",
+                    }}
+                  />
+                </IconButton>
+              ))}
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {selectedRating === 0 ? "Select a rating" : `${selectedRating} out of 5 stars`}
+            </Typography>
+            {ratingFile && fileRatings[ratingFile.id] && fileRatings[ratingFile.id].count > 0 && (
+              <Typography variant="body2" color="text.secondary">
+                Average: {fileRatings[ratingFile.id].average.toFixed(1)} / 5 ({fileRatings[ratingFile.id].count} {fileRatings[ratingFile.id].count === 1 ? 'rating' : 'ratings'})
+              </Typography>
+            )}
+            <TextField
+              label="Comment (Optional)"
+              multiline
+              rows={3}
+              fullWidth
+              value={ratingComment}
+              onChange={(e) => setRatingComment(e.target.value)}
+              sx={{ mt: 3 }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseRatingModal}>Cancel</Button>
+          <Button
+            onClick={handleSubmitRating}
+            variant="contained"
+            disabled={selectedRating === 0 || loading}
+          >
+            Submit Rating
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar for notifications */}
       <Snackbar

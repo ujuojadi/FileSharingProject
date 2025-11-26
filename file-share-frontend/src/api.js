@@ -312,6 +312,7 @@ export const files = {
         if (metadata.courseCode) formData.append('course_code', metadata.courseCode);
         if (metadata.courseName) formData.append('course_name', metadata.courseName);
         if (metadata.description) formData.append('description', metadata.description);
+        if (metadata.groupId) formData.append('group_id', metadata.groupId);
         
         // Use FastAPI endpoint - it handles P2P upload internally
         return api.post('/files/upload', formData, {
@@ -343,7 +344,9 @@ export const groups = {
 export const feedback = {
     submit: (data) => api.post('/feedback', data),
     edit: (feedbackId, data) => api.patch(`/feedback/${feedbackId}`, data),
-    getForFile: (fileId) => api.get(`/feedback/${fileId}`),
+    getForFile: (fileId) => api.get(`/feedback/file/${fileId}`),
+    getAverage: (fileId) => api.get(`/feedback/file/${fileId}/average`),
+    getMyRating: (fileId) => api.get(`/feedback/file/${fileId}/my-rating`),
 };
 
 // Compatibility exports for existing code

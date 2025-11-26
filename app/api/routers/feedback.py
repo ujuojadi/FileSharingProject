@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from uuid import UUID
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.repositories.interfaces import FeedbackRepository, FilesRepository
@@ -23,8 +24,17 @@ async def submit_feedback(
     file_meta = await files_repo.get(data.file_id)
     if not file_meta:
         raise HTTPException(status_code=404, detail="File not found")
-    if data.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Cannot submit feedback for another user")
+    # Override user_id with current user (security)
+    data.user_id = current_user.id
+    # Check if user already rated this file - if so, update instead of create
+    existing_feedback = await feedback_repo.get_by_user_and_file(current_user.id, data.file_id)
+    if existing_feedback:
+        # Update existing feedback
+        updated = await feedback_repo.update(existing_feedback.id, FeedbackUpdate(
+            rating=data.rating,
+            comment=data.comment
+        ))
+        return updated
     return await feedback_repo.create(data)
 
 
@@ -50,4 +60,14 @@ async def list_feedback(file_id: UUID, feedback_repo: FeedbackRepository = Depen
 @router.get("/file/{file_id}/average", response_model=dict)
 async def average_rating(file_id: UUID, feedback_repo: FeedbackRepository = Depends(get_feedback_repo)) -> dict:
     avg = await feedback_repo.average_for_file(file_id)
-    return {"average": avg}
+    return {"average": avg if avg is not None else 0.0, "count": len(await feedback_repo.list_for_file(file_id))}
+
+
+@router.get("/file/{file_id}/my-rating", response_model=Optional[Feedback])
+async def get_my_rating(
+    file_id: UUID,
+    current_user: User = Depends(get_current_verified_user),
+    feedback_repo: FeedbackRepository = Depends(get_feedback_repo),
+) -> Optional[Feedback]:
+    """Get the current user's rating for a specific file"""
+    return await feedback_repo.get_by_user_and_file(current_user.id, file_id)

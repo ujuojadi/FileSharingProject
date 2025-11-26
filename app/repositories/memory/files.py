@@ -24,12 +24,14 @@ class InMemoryFilesRepository:
                 course_code=data_dict.get("course_code"),
                 course_name=data_dict.get("course_name"),
                 description=data_dict.get("description"),
+                group_id=data_dict.get("group_id"),
                 stored_path=data_dict["stored_path"],
             )
         else:
             meta = FileMeta(**data_dict)
         self._files_by_id[meta.id] = meta
         self._files_by_uploader.setdefault(meta.uploader_id, []).append(meta.id)
+        # Note: group_id is stored in the FileMeta object itself
         return meta
 
     async def get(self, file_id: UUID) -> Optional[FileMeta]:
@@ -41,6 +43,10 @@ class InMemoryFilesRepository:
     async def list_by_uploader(self, user_id: UUID) -> list[FileMeta]:
         ids = self._files_by_uploader.get(user_id, [])
         return [self._files_by_id[i] for i in ids]
+
+    async def list_by_group(self, group_id: UUID) -> list[FileMeta]:
+        """List all files associated with a specific group"""
+        return [f for f in self._files_by_id.values() if f.group_id == group_id]
 
     async def delete(self, file_id: UUID) -> bool:
         """Delete a file by ID. Returns True if deleted, False if not found."""

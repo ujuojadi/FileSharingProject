@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from uuid import UUID
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form, Query, Query
 from fastapi.responses import StreamingResponse
 import io
 
@@ -43,6 +43,7 @@ async def upload_file(
     course_code: str | None = Form(None),
     course_name: str | None = Form(None),
     description: str | None = Form(None),
+    group_id: str | None = Form(None),
     files_repo: FilesRepository = Depends(get_files_repo),
     current_user: User = Depends(get_current_verified_user),
 ) -> FileMeta:
@@ -66,6 +67,14 @@ async def upload_file(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to upload file to P2P network")
     
+    # Parse group_id if provided
+    group_uuid = None
+    if group_id:
+        try:
+            group_uuid = UUID(group_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid group_id format")
+    
     # Store metadata with the pre-generated file_id
     meta = FileMetaCreate(
         filename=filename,
@@ -75,6 +84,7 @@ async def upload_file(
         course_code=course_code,
         course_name=course_name,
         description=description,
+        group_id=group_uuid,
         stored_path=p2p_key,  # Store P2P key instead of file path
     )
     # Create metadata with the file_id to ensure it matches the P2P key
