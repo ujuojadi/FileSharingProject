@@ -909,23 +909,29 @@ const handleDelete = async (note) => {
   // UI for rendering cards (keeps fixed height & truncation)
   const renderCards = (data) => {
     return (
-      <Grid container spacing={3} sx={{ mt: 2 }}>
+      <Grid container spacing={3} sx={{ mt: 1 }}>
         {data.map((item) => (
-          <Grid item xs={12} sm={6} md={4} key={item.id}>
+          <Grid item xs={12} sm={6} md={4} lg={3} key={item.id}>
             <Card
+              elevation={2}
               sx={{
                 borderRadius: 3,
-                boxShadow: 3,
-                height: 360, // fixed height for uniformity
-                width: 262,
+                height: 380,
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
                 cursor: "pointer",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                border: "1px solid #f0f0f0",
+                "&:hover": {
+                  transform: "translateY(-8px)",
+                  boxShadow: "0 12px 24px rgba(102, 126, 234, 0.2)",
+                  borderColor: "#667eea",
+                }
               }}
               onClick={() => handleCardClick(item)}
             >
-              <CardContent>
+              <CardContent sx={{ flexGrow: 1, pb: 1 }}>
                 <Typography
                   variant="h6"
                   gutterBottom
@@ -934,14 +940,38 @@ const handleDelete = async (note) => {
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
+                    fontWeight: 600,
+                    color: "#1a1a1a",
+                    mb: 1.5,
                   }}
                 >
                   {item.name}
                 </Typography>
 
-                <Typography variant="body2" color="text.secondary">
-                  {item.courseCode}
-                </Typography>
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: "#667eea",
+                      fontWeight: 600,
+                      fontSize: "0.875rem"
+                    }}
+                  >
+                    {item.courseCode || "No course"}
+                  </Typography>
+                  {item.courseName && (
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        color: "text.secondary",
+                        display: "block",
+                        mt: 0.5
+                      }}
+                    >
+                      {item.courseName}
+                    </Typography>
+                  )}
+                </Box>
 
                 {item.description && (
                   <Typography
@@ -949,9 +979,14 @@ const handleDelete = async (note) => {
                     color="text.secondary"
                     sx={{
                       mt: 1,
-                      maxHeight: 40,
+                      maxHeight: 48,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      lineHeight: 1.4,
+                      fontSize: "0.85rem",
                     }}
                   >
                     {item.description}
@@ -959,8 +994,7 @@ const handleDelete = async (note) => {
                 )}
 
                 {/* preview area */}
-                <Box sx={{ mt: 2, height: 160 }}>
-                  {/* Generic file icon for all files */}
+                <Box sx={{ mt: 2, height: 120, mb: 2 }}>
                   <Box
                     sx={{
                       width: "100%",
@@ -969,46 +1003,81 @@ const handleDelete = async (note) => {
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
-                      bgcolor: "#f4f4f4",
-                      borderRadius: 1,
+                      bgcolor: "linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%)",
+                      background: "linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%)",
+                      borderRadius: 2,
+                      border: "1px solid #e0e0e0",
                     }}
                   >
-                    <UploadFileIcon sx={{ fontSize: 48, color: "#888" }} />
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                    <UploadFileIcon sx={{ fontSize: 40, color: "#667eea", opacity: 0.7 }} />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, fontWeight: 500 }}>
                       {item.type.split("/")[1]?.toUpperCase() || "FILE"}
                     </Typography>
                   </Box>
                 </Box>
 
-                {/* File info */}
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.75rem", fontWeight: 500 }}>
                     {(item.size / 1024).toFixed(1)} KB
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.75rem" }}>
+                    •
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.75rem" }}>
+                    {new Date(item.uploadedAt).toLocaleDateString()}
                   </Typography>
                 </Box>
               </CardContent>
 
-              <CardActions sx={{ justifyContent: "space-between", px: 2, pb: 2 }}>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <StarIcon sx={{ color: "#ffb400", fontSize: 18 }} />
-                  <Typography variant="body2" sx={{ ml: 0.5 }}>
-                    {fileRatings[item.id]?.average?.toFixed(1) || "0.0"} / 5
-                    {fileRatings[item.id]?.count > 0 && (
-                      <Typography component="span" variant="caption" sx={{ ml: 0.5, color: "text.secondary" }}>
-                        ({fileRatings[item.id].count})
-                      </Typography>
-                    )}
+              <CardActions sx={{ 
+                justifyContent: "space-between", 
+                px: 2, 
+                pb: 2,
+                pt: 1,
+                borderTop: "1px solid #f0f0f0"
+              }}>
+                <Box 
+                  sx={{ 
+                    display: "flex", 
+                    alignItems: "center",
+                    cursor: "pointer",
+                    px: 1,
+                    py: 0.5,
+                    borderRadius: 1,
+                    transition: "all 0.2s",
+                    "&:hover": { 
+                      bgcolor: "#fff9e6",
+                      transform: "scale(1.05)"
+                    }
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenRatingModal(item);
+                  }}
+                  title="Rate this file"
+                >
+                  <StarIcon sx={{ color: "#ffb400", fontSize: 20, mr: 0.5 }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontSize: "0.875rem" }}>
+                    {fileRatings[item.id]?.average?.toFixed(1) || "0.0"}
                   </Typography>
+                  {fileRatings[item.id]?.count > 0 && (
+                    <Typography component="span" variant="caption" sx={{ ml: 0.5, color: "text.secondary" }}>
+                      ({fileRatings[item.id].count})
+                    </Typography>
+                  )}
                 </Box>
-                <Box sx={{ display: "flex", gap: 1 }}>
+                <Box sx={{ display: "flex", gap: 0.5 }}>
                   <IconButton
                     size="small"
-                    color="error"
                     onClick={(ev) => {
-                      ev.stopPropagation(); // prevent opening details
+                      ev.stopPropagation();
                       handleDelete(item);
                     }}
                     title="Delete file"
+                    sx={{
+                      color: "#d32f2f",
+                      "&:hover": { bgcolor: "#ffebee" }
+                    }}
                   >
                     <DeleteIcon fontSize="small" />
                   </IconButton>
@@ -1016,8 +1085,17 @@ const handleDelete = async (note) => {
                     size="small"
                     variant="contained"
                     onClick={(ev) => {
-                      ev.stopPropagation(); // prevent opening details
+                      ev.stopPropagation();
                       handleDownload(item);
+                    }}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 600,
+                      bgcolor: "#667eea",
+                      "&:hover": {
+                        bgcolor: "#5568d3",
+                        boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)"
+                      }
                     }}
                   >
                     Download
@@ -1049,100 +1127,145 @@ const handleDelete = async (note) => {
     <Box
       sx={{
         minHeight: "100vh",
-        background: "linear-gradient(135deg, #1976d2 30%, #43a047 100%)",
-        color: "white",
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        pb: 4,
       }}
     >
-      {/* translucent appbar */}
-      <AppBar
-        position="static"
+      {/* Header Section */}
+      <Box
         sx={{
-          background: "rgba(255, 255, 255, 0.15)",
+          background: "linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%)",
           backdropFilter: "blur(10px)",
-          boxShadow: "none",
+          pt: 3,
+          pb: 4,
+          mb: 4,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
         }}
       >
-        <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: "bold" }}>
-            📚 NOTESHARE Dashboard
-          </Typography>
-          <Button 
-            color="inherit" 
-            onClick={async () => {
-              try {
-                await auth.logout();
-                window.location.href = "/login";
-              } catch (err) {
-                console.error("Logout failed:", err);
-                setSnackbar({
-                  open: true,
-                  message: "Logout failed. Please try again.",
-                  severity: "error"
-                });
-              }
+        <Container>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+            <Typography 
+              variant="h4" 
+              sx={{ 
+                fontWeight: 700, 
+                color: "white",
+                letterSpacing: "0.5px",
+                textShadow: "0 2px 4px rgba(0,0,0,0.2)"
+              }}
+            >
+              📚 Dashboard
+            </Typography>
+            <Button 
+              variant="outlined"
+              onClick={async () => {
+                try {
+                  await auth.logout();
+                  window.location.href = "/login";
+                } catch (err) {
+                  console.error("Logout failed:", err);
+                  setSnackbar({
+                    open: true,
+                    message: "Logout failed. Please try again.",
+                    severity: "error"
+                  });
+                }
+              }}
+              sx={{
+                color: "white",
+                borderColor: "rgba(255,255,255,0.5)",
+                textTransform: "none",
+                fontWeight: 600,
+                px: 3,
+                "&:hover": {
+                  borderColor: "white",
+                  bgcolor: "rgba(255,255,255,0.1)"
+                }
+              }}
+            >
+              Logout
+            </Button>
+          </Box>
+
+          {/* Welcome Section */}
+          <Box sx={{ textAlign: "center", mb: 3 }}>
+            <Typography 
+              variant="h5" 
+              sx={{ 
+                fontWeight: 600, 
+                color: "white",
+                mb: 1,
+                textShadow: "0 2px 4px rgba(0,0,0,0.2)"
+              }}
+            >
+              Welcome back, {user?.full_name || "Student"} 👋
+            </Typography>
+            <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.9)" }}>
+              Manage your files, join groups, and share knowledge
+            </Typography>
+          </Box>
+
+          {/* Search and Sort */}
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 2,
+              alignItems: "center",
+              flexWrap: "wrap",
             }}
           >
-            Logout
-          </Button>
-        </Toolbar>
-      </AppBar>
-
-      <Container sx={{ mt: 4 }}>
-        {/* search + sort */}
-        <Box sx={{ textAlign: "center", mb: 4 }}>
-          <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Welcome back, {user?.full_name || "Student"} 👋
-          </Typography>
-
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "center",
-                  gap: 2,
-                  alignItems: "center",
-                  flexWrap: "wrap",
+            <Paper
+              elevation={3}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                width: { xs: "100%", sm: 450 },
+                borderRadius: 3,
+                px: 2,
+                py: 0.5,
+                position: "relative",
+                bgcolor: "white",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              }}
+            >
+              <SearchIcon sx={{ color: "#667eea", mr: 1 }} />
+              <TextField
+                variant="standard"
+                placeholder="Search files..."
+                fullWidth
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                InputProps={{ disableUnderline: true }}
+                sx={{ 
+                  "& .MuiInputBase-input": {
+                    py: 1.5,
+                    fontSize: "0.95rem"
+                  }
                 }}
-              >
-                <Paper
+                disabled={searchLoading}
+              />
+              {searchLoading && (
+                <LinearProgress
                   sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    width: 400,
-                    borderRadius: 3,
-                    px: 2,
-                    position: "relative", // For LinearProgress positioning
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 2,
+                    borderRadius: "0 0 12px 12px",
                   }}
-                >
-                  <SearchIcon sx={{ color: "text.secondary" }} />
-                  <TextField
-                    variant="standard"
-                    placeholder="Search notes..."
-                    fullWidth
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    InputProps={{ disableUnderline: true }}
-                    sx={{ ml: 1 }}
-                    disabled={searchLoading}
-                  />
-                  {searchLoading && (
-                    <LinearProgress
-                      sx={{
-                        position: "absolute",
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        height: 2,
-                      }}
-                    />
-                  )}
-                </Paper>
+                />
+              )}
+            </Paper>
 
             <FormControl
               size="small"
+              elevation={3}
               sx={{
-                background: "white",
+                bgcolor: "white",
                 borderRadius: 2,
-                minWidth: 140,
+                minWidth: 150,
+                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
               }}
             >
               <Select
@@ -1151,9 +1274,15 @@ const handleDelete = async (note) => {
                 onChange={(e) => setSortBy(e.target.value)}
                 renderValue={(value) => {
                   if (value === "") {
-                    return <em>Sort by</em>;
+                    return <em style={{ color: "#999" }}>Sort by</em>;
                   }
                   return value.charAt(0).toUpperCase() + value.slice(1);
+                }}
+                sx={{
+                  "& .MuiSelect-select": {
+                    py: 1.2,
+                    fontWeight: 500
+                  }
                 }}
               >
                 <MenuItem value="">
@@ -1165,33 +1294,103 @@ const handleDelete = async (note) => {
               </Select>
             </FormControl>
           </Box>
-        </Box>
+        </Container>
+      </Box>
+
+      <Container>
 
         {/* tabs and content card */}
         <Paper
+          elevation={4}
           sx={{
-            p: 2,
-            borderRadius: 3,
-            background: "rgba(255,255,255,0.95)",
-            color: "black",
+            p: { xs: 2, sm: 3 },
+            borderRadius: 4,
+            bgcolor: "white",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+            overflow: "hidden",
           }}
         >
           <Tabs
             value={tab}
             onChange={handleTabChange}
-            centered
+            variant="scrollable"
+            scrollButtons="auto"
             textColor="primary"
             indicatorColor="primary"
-            sx={{ mb: 3 }}
+            sx={{ 
+              mb: 3,
+              borderBottom: "2px solid #f0f0f0",
+              "& .MuiTab-root": {
+                textTransform: "none",
+                fontWeight: 600,
+                fontSize: "0.95rem",
+                minHeight: 64,
+                "&.Mui-selected": {
+                  color: "#667eea",
+                }
+              },
+              "& .MuiTabs-indicator": {
+                height: 3,
+                borderRadius: "3px 3px 0 0",
+              }
+            }}
           >
-            <Tab icon={<NoteIcon />} label="All Notes" />
-            <Tab icon={<UploadFileIcon />} label="My Uploads" />
-            <Tab icon={<GroupsIcon />} label="Groups" />
-            <Tab icon={<StarIcon />} label="Top Rated" />
+            <Tab icon={<NoteIcon />} iconPosition="start" label="All Notes" />
+            <Tab icon={<UploadFileIcon />} iconPosition="start" label="My Uploads" />
+            <Tab icon={<GroupsIcon />} iconPosition="start" label="Groups" />
+            <Tab icon={<StarIcon />} iconPosition="start" label="Top Rated" />
           </Tabs>
 
           {/* Tab panels */}
-          {tab === 0 && renderCards(filtered)}
+          {tab === 0 && (
+            <>
+              {filtered.length === 0 ? (
+                <Box sx={{ textAlign: "center", py: 8 }}>
+                  <Box sx={{ 
+                    display: "inline-flex",
+                    p: 3,
+                    borderRadius: "50%",
+                    bgcolor: "#f5f7ff",
+                    mb: 3
+                  }}>
+                    <NoteIcon sx={{ fontSize: 64, color: "#667eea", opacity: 0.5 }} />
+                  </Box>
+                  <Typography variant="h5" sx={{ fontWeight: 600, color: "#1a1a1a", mb: 1 }}>
+                    No Files Found
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400, mx: "auto", mb: 3 }}>
+                    {search.trim() ? "No files match your search. Try different keywords." : "Upload your first file to get started!"}
+                  </Typography>
+                  {!search.trim() && (
+                    <Button
+                      variant="contained"
+                      startIcon={<UploadFileIcon />}
+                      onClick={openUploadModal}
+                      sx={{
+                        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                        color: "white",
+                        fontWeight: 600,
+                        textTransform: "none",
+                        px: 4,
+                        py: 1.5,
+                        boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
+                        "&:hover": {
+                          background: "linear-gradient(135deg, #5568d3 0%, #6a3d8f 100%)",
+                          boxShadow: "0 6px 20px rgba(102, 126, 234, 0.5)",
+                          transform: "translateY(-2px)",
+                        },
+                        transition: "all 0.3s ease",
+                      }}
+                    >
+                      Upload Your First File
+                    </Button>
+                  )}
+                </Box>
+              ) : (
+                renderCards(filtered)
+              )}
+            </>
+          )}
           {tab === 1 && (
             <Box sx={{ textAlign: "center" }}>
               <Button
@@ -1200,12 +1399,20 @@ const handleDelete = async (note) => {
                 onClick={openUploadModal}
                 sx={{
                   mb: 3,
-                  background: "linear-gradient(90deg, #1976d2, #43a047)",
+                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                   color: "white",
-                  fontWeight: "bold",
+                  fontWeight: 600,
+                  textTransform: "none",
+                  boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
+                  "&:hover": {
+                    background: "linear-gradient(135deg, #5568d3 0%, #6a3d8f 100%)",
+                    boxShadow: "0 6px 20px rgba(102, 126, 234, 0.5)",
+                    transform: "translateY(-2px)",
+                  },
+                  transition: "all 0.3s ease",
                 }}
               >
-                Upload New Note
+                Upload New File
               </Button>
 
               {renderCards(filtered)}
@@ -1244,22 +1451,61 @@ const handleDelete = async (note) => {
                   <Grid container spacing={2}>
                     {myGroups.map((group) => (
                       <Grid item xs={12} sm={6} md={4} key={group.id}>
-                        <Card sx={{ borderRadius: 3, boxShadow: 2, p: 2, height: "100%" }}>
-                          <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                        <Card 
+                          elevation={2}
+                          sx={{ 
+                            borderRadius: 3, 
+                            p: 2.5, 
+                            height: "100%",
+                            border: "1px solid #e8f5e9",
+                            bgcolor: "#f1f8f4",
+                            transition: "all 0.3s ease",
+                            "&:hover": {
+                              transform: "translateY(-4px)",
+                              boxShadow: "0 8px 16px rgba(67, 160, 71, 0.15)",
+                            }
+                          }}
+                        >
+                          <Typography variant="h6" fontWeight={600} noWrap sx={{ mb: 1, color: "#1a1a1a" }}>
                             {group.name}
                           </Typography>
                           {group.description && (
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
+                            <Typography 
+                              variant="body2" 
+                              color="text.secondary" 
+                              sx={{ 
+                                mt: 1, 
+                                mb: 1.5,
+                                minHeight: 40,
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              }}
+                            >
                               {group.description}
                             </Typography>
                           )}
-                          <Typography variant="body2" color="text.secondary">
-                            {groupMemberCounts[group.id] || 0} member{groupMemberCounts[group.id] !== 1 ? 's' : ''}
-                          </Typography>
+                          <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                            <GroupsIcon sx={{ fontSize: 18, color: "#43a047", mr: 0.5 }} />
+                            <Typography variant="body2" sx={{ fontWeight: 500, color: "#43a047" }}>
+                              {groupMemberCounts[group.id] || 0} member{groupMemberCounts[group.id] !== 1 ? 's' : ''}
+                            </Typography>
+                          </Box>
                           <Button
                             variant="contained"
                             size="small"
-                            sx={{ mt: 1, background: "#43a047", color: "white" }}
+                            sx={{ 
+                              mt: 1, 
+                              bgcolor: "#43a047", 
+                              color: "white",
+                              textTransform: "none",
+                              fontWeight: 600,
+                              "&:hover": {
+                                bgcolor: "#388e3c",
+                                boxShadow: "0 4px 12px rgba(67, 160, 71, 0.4)"
+                              }
+                            }}
                             disabled
                           >
                             Member
@@ -1286,18 +1532,47 @@ const handleDelete = async (note) => {
                       const isMember = isMemberOfGroup(group.id);
                       return (
                         <Grid item xs={12} sm={6} md={4} key={group.id}>
-                          <Card sx={{ borderRadius: 3, boxShadow: 2, p: 2, height: "100%" }}>
-                            <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                          <Card 
+                            elevation={2}
+                            sx={{ 
+                              borderRadius: 3, 
+                              p: 2.5, 
+                              height: "100%",
+                              border: "1px solid #f0f0f0",
+                              transition: "all 0.3s ease",
+                              "&:hover": {
+                                transform: "translateY(-4px)",
+                                boxShadow: "0 8px 16px rgba(102, 126, 234, 0.15)",
+                                borderColor: "#667eea",
+                              }
+                            }}
+                          >
+                            <Typography variant="h6" fontWeight={600} noWrap sx={{ mb: 1, color: "#1a1a1a" }}>
                               {group.name}
                             </Typography>
                             {group.description && (
-                              <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
+                              <Typography 
+                                variant="body2" 
+                                color="text.secondary" 
+                                sx={{ 
+                                  mt: 1, 
+                                  mb: 1.5,
+                                  minHeight: 40,
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
+                              >
                                 {group.description}
                               </Typography>
                             )}
-                            <Typography variant="body2" color="text.secondary">
-                              {groupMemberCounts[group.id] || 0} member{groupMemberCounts[group.id] !== 1 ? 's' : ''}
-                            </Typography>
+                            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                              <GroupsIcon sx={{ fontSize: 18, color: "#667eea", mr: 0.5 }} />
+                              <Typography variant="body2" sx={{ fontWeight: 500, color: "#667eea" }}>
+                                {groupMemberCounts[group.id] || 0} member{groupMemberCounts[group.id] !== 1 ? 's' : ''}
+                              </Typography>
+                            </Box>
                             <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
                               <Button
                                 variant={isMember ? "outlined" : "contained"}
@@ -1305,9 +1580,22 @@ const handleDelete = async (note) => {
                                 onClick={() => !isMember && handleJoinGroup(group.id)}
                                 disabled={isMember}
                                 sx={{
+                                  textTransform: "none",
+                                  fontWeight: 600,
                                   ...(isMember
-                                    ? { color: "#43a047", borderColor: "#43a047" }
-                                    : { background: "#1976d2", color: "white" }),
+                                    ? { 
+                                        color: "#43a047", 
+                                        borderColor: "#43a047",
+                                        "&:hover": { borderColor: "#43a047", bgcolor: "#f1f8f4" }
+                                      }
+                                    : { 
+                                        background: "#667eea", 
+                                        color: "white",
+                                        "&:hover": {
+                                          background: "#5568d3",
+                                          boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)"
+                                        }
+                                      }),
                                 }}
                               >
                                 {isMember ? "Member" : "Join Group"}
@@ -1317,7 +1605,16 @@ const handleDelete = async (note) => {
                                   variant="outlined"
                                   size="small"
                                   onClick={() => handleViewGroupFiles(group)}
-                                  sx={{ color: "#1976d2", borderColor: "#1976d2" }}
+                                  sx={{ 
+                                    textTransform: "none",
+                                    fontWeight: 600,
+                                    color: "#667eea", 
+                                    borderColor: "#667eea",
+                                    "&:hover": { 
+                                      borderColor: "#5568d3",
+                                      bgcolor: "#f5f7ff"
+                                    }
+                                  }}
                                 >
                                   View Files
                                 </Button>
@@ -1335,18 +1632,26 @@ const handleDelete = async (note) => {
           {tab === 3 && (
             <Box>
               {filtered.length === 0 ? (
-                <Box sx={{ textAlign: "center", py: 5 }}>
-                  <StarIcon sx={{ fontSize: 64, color: "#e0e0e0", mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                <Box sx={{ textAlign: "center", py: 8 }}>
+                  <Box sx={{ 
+                    display: "inline-flex",
+                    p: 3,
+                    borderRadius: "50%",
+                    bgcolor: "#fff9e6",
+                    mb: 3
+                  }}>
+                    <StarIcon sx={{ fontSize: 64, color: "#ffb400", opacity: 0.5 }} />
+                  </Box>
+                  <Typography variant="h5" sx={{ fontWeight: 600, color: "#1a1a1a", mb: 1 }}>
                     No Rated Files Yet
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Files will appear here once they receive ratings from users.
+                  <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400, mx: "auto" }}>
+                    Files will appear here once they receive ratings from users. Be the first to rate a file!
                   </Typography>
                 </Box>
               ) : (
                 <>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, px: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2, fontWeight: 500 }}>
                     Showing {filtered.length} top-rated file{filtered.length !== 1 ? 's' : ''} (sorted by highest average rating)
                   </Typography>
                   {renderCards(filtered)}
@@ -1367,26 +1672,38 @@ const handleDelete = async (note) => {
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
-            width: 420,
-            bgcolor: "background.paper",
-            boxShadow: 24,
+            width: { xs: "90%", sm: 500 },
+            bgcolor: "white",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
             p: 4,
-            borderRadius: 3,
+            borderRadius: 4,
+            outline: "none",
           }}
         >
-          <Typography variant="h6" mb={2}>
-            Upload a New Note
+          <Typography variant="h5" mb={3} sx={{ fontWeight: 700, color: "#1a1a1a" }}>
+            Upload a New File
           </Typography>
 
           <Button
-            variant="contained"
+            variant="outlined"
             component="label"
             startIcon={<UploadFileIcon />}
             fullWidth
             sx={{
-              mb: 2,
-              background: "linear-gradient(90deg, #1976d2, #43a047)",
-              color: "white",
+              mb: 3,
+              py: 2,
+              borderColor: "#667eea",
+              color: "#667eea",
+              borderWidth: 2,
+              borderStyle: "dashed",
+              textTransform: "none",
+              fontWeight: 600,
+              fontSize: "1rem",
+              "&:hover": {
+                borderColor: "#5568d3",
+                bgcolor: "#f5f7ff",
+                borderWidth: 2,
+              }
             }}
           >
             Choose File
@@ -1465,14 +1782,38 @@ const handleDelete = async (note) => {
       </Modal>
 
       {/* Details Dialog */}
-      <Dialog open={openDetails} onClose={handleCloseDetails} maxWidth="lg" fullWidth maxHeight="90vh">
-        <DialogTitle>
+      <Dialog 
+        open={openDetails} 
+        onClose={handleCloseDetails} 
+        maxWidth="lg" 
+        fullWidth 
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+            maxHeight: "90vh"
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          bgcolor: "#667eea",
+          color: "white",
+          pb: 2,
+          pt: 3
+        }}>
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Typography variant="h5" noWrap sx={{ flex: 1, mr: 2 }}>
+            <Typography variant="h5" noWrap sx={{ flex: 1, mr: 2, fontWeight: 700 }}>
               {selectedNote?.name}
             </Typography>
-            <IconButton onClick={handleCloseDetails} size="small">
-              <Typography variant="h6">×</Typography>
+            <IconButton 
+              onClick={handleCloseDetails} 
+              size="small"
+              sx={{ 
+                color: "white",
+                "&:hover": { bgcolor: "rgba(255,255,255,0.2)" }
+              }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: 300 }}>×</Typography>
             </IconButton>
           </Box>
         </DialogTitle>
@@ -1498,8 +1839,15 @@ const handleDelete = async (note) => {
               </Box>
 
               {/* File Preview Section */}
-              <Box sx={{ mb: 3, border: "1px solid #e0e0e0", borderRadius: 2, p: 2, bgcolor: "#fafafa" }}>
-                <Typography variant="h6" gutterBottom>
+              <Box sx={{ 
+                mb: 3, 
+                border: "1px solid #e0e0e0", 
+                borderRadius: 3, 
+                p: 3, 
+                bgcolor: "#fafafa",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
+              }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a" }}>
                   File Preview
                 </Typography>
                 {previewLoading ? (
@@ -1560,13 +1908,21 @@ const handleDelete = async (note) => {
               {/* Rate Usefulness Section */}
               <Box sx={{ 
                 mb: 2, 
-                p: 3, 
-                bgcolor: "rgba(255, 184, 0, 0.1)", 
-                borderRadius: 2, 
-                border: "2px solid #ffb400"
+                p: 3.5, 
+                background: "linear-gradient(135deg, rgba(255, 184, 0, 0.1) 0%, rgba(255, 193, 7, 0.15) 100%)",
+                borderRadius: 3, 
+                border: "2px solid #ffb400",
+                boxShadow: "0 4px 12px rgba(255, 184, 0, 0.2)",
               }}>
-                <Typography variant="h6" gutterBottom sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <StarIcon sx={{ color: "#ffb400" }} />
+                <Typography variant="h6" gutterBottom sx={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  gap: 1,
+                  fontWeight: 700,
+                  color: "#1a1a1a",
+                  mb: 2
+                }}>
+                  <StarIcon sx={{ color: "#ffb400", fontSize: 28 }} />
                   Rate How Useful This File Was
                 </Typography>
                 
@@ -1666,13 +2022,14 @@ const handleDelete = async (note) => {
             left: "50%",
             transform: "translate(-50%, -50%)",
             width: { xs: "90%", sm: 500 },
-            bgcolor: "background.paper",
-            borderRadius: 3,
-            boxShadow: 24,
+            bgcolor: "white",
+            borderRadius: 4,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
             p: 4,
+            outline: "none",
           }}
         >
-          <Typography variant="h5" fontWeight="bold" gutterBottom>
+          <Typography variant="h5" fontWeight={700} gutterBottom sx={{ mb: 3, color: "#1a1a1a" }}>
             Create New Group
           </Typography>
           <form onSubmit={handleCreateGroup}>
@@ -1681,8 +2038,9 @@ const handleDelete = async (note) => {
               fullWidth
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
-              sx={{ mb: 2 }}
+              sx={{ mb: 2.5 }}
               required
+              variant="outlined"
             />
             <TextField
               label="Description (Optional)"
@@ -1692,13 +2050,46 @@ const handleDelete = async (note) => {
               value={groupDescription}
               onChange={(e) => setGroupDescription(e.target.value)}
               sx={{ mb: 3 }}
+              variant="outlined"
             />
             <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
-              <Button onClick={closeGroupModal} variant="outlined">
+              <Button 
+                onClick={closeGroupModal} 
+                variant="outlined"
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 600,
+                  color: "text.secondary",
+                  borderColor: "#e0e0e0",
+                  "&:hover": { 
+                    borderColor: "#bdbdbd",
+                    bgcolor: "#f5f5f5"
+                  }
+                }}
+              >
                 Cancel
               </Button>
-              <Button type="submit" variant="contained" disabled={groupsLoading}>
-                Create Group
+              <Button 
+                type="submit" 
+                variant="contained" 
+                disabled={groupsLoading}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 600,
+                  bgcolor: "#667eea",
+                  px: 3,
+                  boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
+                  "&:hover": {
+                    bgcolor: "#5568d3",
+                    boxShadow: "0 6px 20px rgba(102, 126, 234, 0.5)",
+                  },
+                  "&:disabled": {
+                    bgcolor: "#e0e0e0",
+                    color: "#9e9e9e"
+                  }
+                }}
+              >
+                {groupsLoading ? "Creating..." : "Create Group"}
               </Button>
             </Box>
           </form>
@@ -1706,9 +2097,33 @@ const handleDelete = async (note) => {
       </Modal>
 
       {/* Group Files Dialog */}
-      <Dialog open={selectedGroupForFiles !== null} onClose={handleCloseGroupFiles} maxWidth="md" fullWidth>
-        <DialogTitle>
-          Files in {selectedGroupForFiles?.name}
+      <Dialog 
+        open={selectedGroupForFiles !== null} 
+        onClose={handleCloseGroupFiles} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          bgcolor: "#667eea",
+          color: "white",
+          pb: 2,
+          pt: 3,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
+            <GroupsIcon sx={{ fontSize: 28 }} />
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+              Files in {selectedGroupForFiles?.name}
+            </Typography>
+          </Box>
           <Button
             variant="contained"
             startIcon={<UploadFileIcon />}
@@ -1718,9 +2133,15 @@ const handleDelete = async (note) => {
               setOpenUpload(true);
             }}
             sx={{
-              ml: 2,
-              background: "linear-gradient(90deg, #1976d2, #43a047)",
-              color: "white",
+              bgcolor: "white",
+              color: "#667eea",
+              textTransform: "none",
+              fontWeight: 600,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+              "&:hover": {
+                bgcolor: "rgba(255,255,255,0.9)",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              }
             }}
             size="small"
           >
@@ -1740,30 +2161,59 @@ const handleDelete = async (note) => {
             <Grid container spacing={2}>
               {groupFiles.map((file) => (
                 <Grid item xs={12} sm={6} md={4} key={file.id}>
-                  <Card sx={{ borderRadius: 2, boxShadow: 1, p: 2 }}>
-                    <Typography variant="subtitle2" fontWeight="bold" noWrap>
+                  <Card 
+                    elevation={2}
+                    sx={{ 
+                      borderRadius: 2, 
+                      p: 2,
+                      border: "1px solid #f0f0f0",
+                      transition: "all 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 4px 12px rgba(102, 126, 234, 0.15)",
+                      }
+                    }}
+                  >
+                    <Typography variant="subtitle2" fontWeight={600} noWrap sx={{ mb: 1, color: "#1a1a1a" }}>
                       {file.name}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
                       {(file.size / 1024).toFixed(2)} KB
                     </Typography>
-                    <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => handleDownload(file)}
-                      >
-                        Download
-                      </Button>
-                    </Box>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => handleDownload(file)}
+                      sx={{
+                        textTransform: "none",
+                        fontWeight: 600,
+                        bgcolor: "#667eea",
+                        "&:hover": {
+                          bgcolor: "#5568d3",
+                          boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)"
+                        }
+                      }}
+                    >
+                      Download
+                    </Button>
                   </Card>
                 </Grid>
               ))}
             </Grid>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseGroupFiles}>Close</Button>
+        <DialogActions sx={{ px: 3, py: 2.5, bgcolor: "#fafafa", borderTop: "1px solid #e0e0e0" }}>
+          <Button 
+            onClick={handleCloseGroupFiles}
+            sx={{
+              textTransform: "none",
+              fontWeight: 600,
+              color: "text.secondary",
+              "&:hover": { bgcolor: "#f5f5f5" }
+            }}
+          >
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
 

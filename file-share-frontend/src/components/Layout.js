@@ -20,34 +20,93 @@ function Layout() {
   }, [location]); // Update when route changes
 
   return (
-    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", bgcolor: "#f5f7fa" }}>
       {/* Navbar */}
-      <AppBar position="static" color="default" elevation={1}>
-        <Toolbar>
+      <AppBar 
+        position="static" 
+        elevation={0}
+        sx={{ 
+          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          borderBottom: "1px solid rgba(255,255,255,0.1)"
+        }}
+      >
+        <Toolbar sx={{ py: 1 }}>
           <Typography
-            variant="h6"
-            sx={{ flexGrow: 1, fontWeight: "bold", color: "primary.main" }}
+            variant="h5"
+            sx={{ 
+              flexGrow: 1, 
+              fontWeight: 700, 
+              color: "white",
+              letterSpacing: "0.5px",
+              textShadow: "0 2px 4px rgba(0,0,0,0.1)"
+            }}
           >
-            📚 NOTESHARE
+            📚 NoteShare
           </Typography>
           {!isAuthenticated && (
-            <>
-              <Button component={RouterLink} to="/" color="primary">
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <Button 
+                component={RouterLink} 
+                to="/" 
+                sx={{ 
+                  color: "white",
+                  textTransform: "none",
+                  fontWeight: 500,
+                  "&:hover": { bgcolor: "rgba(255,255,255,0.1)" }
+                }}
+              >
                 Home
               </Button>
-              <Button component={RouterLink} to="/login" color="primary">
+              <Button 
+                component={RouterLink} 
+                to="/login"
+                sx={{ 
+                  color: "white",
+                  textTransform: "none",
+                  fontWeight: 500,
+                  "&:hover": { bgcolor: "rgba(255,255,255,0.1)" }
+                }}
+              >
                 Login
               </Button>
-              <Button component={RouterLink} to="/register" color="primary">
+              <Button 
+                component={RouterLink} 
+                to="/register"
+                variant="contained"
+                sx={{ 
+                  bgcolor: "white",
+                  color: "#667eea",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  px: 3,
+                  boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+                  "&:hover": { 
+                    bgcolor: "rgba(255,255,255,0.9)",
+                    boxShadow: "0 6px 12px rgba(0,0,0,0.15)"
+                  }
+                }}
+              >
                 Register
               </Button>
-            </>
+            </Box>
           )}
           {isAuthenticated && (
             <Button 
               component={RouterLink} 
-              to="/dashboard" 
-              color="primary"
+              to="/dashboard"
+              variant="contained"
+              sx={{ 
+                bgcolor: "white",
+                color: "#667eea",
+                textTransform: "none",
+                fontWeight: 600,
+                px: 3,
+                boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+                "&:hover": { 
+                  bgcolor: "rgba(255,255,255,0.9)",
+                  boxShadow: "0 6px 12px rgba(0,0,0,0.15)"
+                }
+              }}
             >
               Dashboard
             </Button>
@@ -61,9 +120,17 @@ function Layout() {
       </Box>
 
       {/* Footer */}
-      <Box textAlign="center" py={3} bgcolor="grey.100">
-        <Typography variant="body2" color="text.secondary">
-          © {new Date().getFullYear()} NOTESHARE – A UL Students File Sharing Project
+      <Box 
+        textAlign="center" 
+        py={3} 
+        sx={{ 
+          bgcolor: "white",
+          borderTop: "1px solid #e0e0e0",
+          mt: "auto"
+        }}
+      >
+        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+          © {new Date().getFullYear()} NoteShare – A UL Students File Sharing Project
         </Typography>
       </Box>
     </Box>
