@@ -64,11 +64,14 @@ function Dashboard() {
   const [openDetails, setOpenDetails] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
 
-    const recommendedGroups = [
-    { id: 1, name: "CSCI 475 - Distributed Systems", members: 34 },
-    { id: 2, name: "MATH 301 - Linear Algebra", members: 28 },
-    { id: 3, name: "ENGL 202 - Technical Writing", members: 19 },
-  ];
+  // Groups state
+  const [allGroups, setAllGroups] = useState([]);
+  const [myGroups, setMyGroups] = useState([]);
+  const [groupMemberCounts, setGroupMemberCounts] = useState({});
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [openGroupModal, setOpenGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupDescription, setGroupDescription] = useState("");
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
@@ -336,6 +339,104 @@ useEffect(() => {
     setCourseCode("");
     setCourseName("");
     setDescription("");
+  };
+
+  // Group modal handlers
+  const openGroupModal = () => setOpenGroupModal(true);
+  const closeGroupModal = () => {
+    setOpenGroupModal(false);
+    setGroupName("");
+    setGroupDescription("");
+  };
+
+  // Handle group creation
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    if (!groupName.trim()) {
+      setSnackbar({
+        open: true,
+        message: "Please enter a group name.",
+        severity: "error"
+      });
+      return;
+    }
+
+    try {
+      setGroupsLoading(true);
+      const response = await groups.create({
+        name: groupName.trim(),
+        description: groupDescription.trim() || null,
+      });
+      
+      setSnackbar({
+        open: true,
+        message: `Group "${response.data.name}" created successfully!`,
+        severity: "success"
+      });
+      
+      closeGroupModal();
+      
+      // Reload groups
+      const allGroupsResponse = await groups.list();
+      setAllGroups(allGroupsResponse.data || []);
+      
+      const myGroupsResponse = await groups.getMyGroups();
+      setMyGroups(myGroupsResponse.data || []);
+      
+      // Update member count for new group
+      const countResponse = await groups.getMemberCount(response.data.id);
+      setGroupMemberCounts(prev => ({
+        ...prev,
+        [response.data.id]: countResponse.data?.member_count || 0
+      }));
+    } catch (err) {
+      console.error("Failed to create group:", err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.detail || "Failed to create group. Please try again.",
+        severity: "error"
+      });
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
+
+  // Handle joining a group
+  const handleJoinGroup = async (groupId) => {
+    try {
+      setGroupsLoading(true);
+      await groups.join(groupId);
+      
+      setSnackbar({
+        open: true,
+        message: "Successfully joined group!",
+        severity: "success"
+      });
+      
+      // Reload user's groups and member counts
+      const myGroupsResponse = await groups.getMyGroups();
+      setMyGroups(myGroupsResponse.data || []);
+      
+      const countResponse = await groups.getMemberCount(groupId);
+      setGroupMemberCounts(prev => ({
+        ...prev,
+        [groupId]: countResponse.data?.member_count || 0
+      }));
+    } catch (err) {
+      console.error("Failed to join group:", err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.detail || "Failed to join group. Please try again.",
+        severity: "error"
+      });
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
+
+  // Check if user is a member of a group
+  const isMemberOfGroup = (groupId) => {
+    return myGroups.some(g => g.id === groupId);
   };
 
 
@@ -875,47 +976,113 @@ const handleDelete = async (note) => {
             </Box>
           )}
           {tab === 2 && (
-            <Box sx={{ textAlign: "center", py: 5 }}>
-              <Typography variant="h6" gutterBottom>
-                My Groups
-              </Typography>
+            <Box sx={{ py: 3 }}>
+              <Box sx={{ textAlign: "center", mb: 4 }}>
+                <Button
+                  variant="contained"
+                  startIcon={<GroupsIcon />}
+                  onClick={openGroupModal}
+                  sx={{
+                    mb: 2,
+                    background: "linear-gradient(90deg, #1976d2, #43a047)",
+                    color: "white",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Create New Group
+                </Button>
+              </Box>
 
-              <Button
-                variant="contained"
-                startIcon={<GroupsIcon />}
-                sx={{
-                  mb: 3,
-                  background: "linear-gradient(90deg, #1976d2, #43a047)",
-                  color: "white",
-                }}
-              >
-                Create / Join Group
-              </Button>
+              {groupsLoading && (
+                <Box sx={{ textAlign: "center", py: 3 }}>
+                  <LinearProgress />
+                </Box>
+              )}
 
-              <Typography variant="subtitle1" fontWeight="bold" sx={{ mt: 3, mb: 2 }}>
-                Recommended for You:
-              </Typography>
-
-              <Grid container spacing={2} justifyContent="center">
-                {recommendedGroups.map((g) => (
-                  <Grid item xs={12} sm={6} md={4} key={g.id}>
-                    <Card sx={{ borderRadius: 3, boxShadow: 2, p: 2 }}>
-                      <Typography variant="subtitle1" fontWeight="bold" noWrap>
-                        {g.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {g.members} members
-                      </Typography>
-                      <Button
-                        variant="outlined"
-                        sx={{ mt: 1, color: "#1976d2", borderColor: "#1976d2" }}
-                      >
-                        Join Group
-                      </Button>
-                    </Card>
+              {/* My Groups Section */}
+              {myGroups.length > 0 && (
+                <Box sx={{ mb: 4 }}>
+                  <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
+                    My Groups ({myGroups.length})
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {myGroups.map((group) => (
+                      <Grid item xs={12} sm={6} md={4} key={group.id}>
+                        <Card sx={{ borderRadius: 3, boxShadow: 2, p: 2, height: "100%" }}>
+                          <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                            {group.name}
+                          </Typography>
+                          {group.description && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
+                              {group.description}
+                            </Typography>
+                          )}
+                          <Typography variant="body2" color="text.secondary">
+                            {groupMemberCounts[group.id] || 0} member{groupMemberCounts[group.id] !== 1 ? 's' : ''}
+                          </Typography>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            sx={{ mt: 1, background: "#43a047", color: "white" }}
+                            disabled
+                          >
+                            Member
+                          </Button>
+                        </Card>
+                      </Grid>
+                    ))}
                   </Grid>
-                ))}
-              </Grid>
+                </Box>
+              )}
+
+              {/* All Groups Section (P2P) */}
+              <Box>
+                <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
+                  All Groups ({allGroups.length})
+                </Typography>
+                {allGroups.length === 0 ? (
+                  <Typography variant="body1" color="text.secondary" sx={{ textAlign: "center", py: 5 }}>
+                    No groups found. Create the first group!
+                  </Typography>
+                ) : (
+                  <Grid container spacing={2}>
+                    {allGroups.map((group) => {
+                      const isMember = isMemberOfGroup(group.id);
+                      return (
+                        <Grid item xs={12} sm={6} md={4} key={group.id}>
+                          <Card sx={{ borderRadius: 3, boxShadow: 2, p: 2, height: "100%" }}>
+                            <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                              {group.name}
+                            </Typography>
+                            {group.description && (
+                              <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
+                                {group.description}
+                              </Typography>
+                            )}
+                            <Typography variant="body2" color="text.secondary">
+                              {groupMemberCounts[group.id] || 0} member{groupMemberCounts[group.id] !== 1 ? 's' : ''}
+                            </Typography>
+                            <Button
+                              variant={isMember ? "outlined" : "contained"}
+                              size="small"
+                              onClick={() => !isMember && handleJoinGroup(group.id)}
+                              disabled={isMember}
+                              sx={{
+                                mt: 1,
+                                ...(isMember
+                                  ? { color: "#43a047", borderColor: "#43a047" }
+                                  : { background: "#1976d2", color: "white" }),
+                              }}
+                            >
+                              {isMember ? "Already a Member" : "Join Group"}
+                            </Button>
+                          </Card>
+                        </Grid>
+                      );
+                    })}
+                  </Grid>
+                )}
+              </Box>
             </Box>
           )}
           {tab === 3 && renderCards(filtered)}
@@ -1060,6 +1227,54 @@ const handleDelete = async (note) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Create Group Modal */}
+      <Modal open={openGroupModal} onClose={closeGroupModal}>
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: { xs: "90%", sm: 500 },
+            bgcolor: "background.paper",
+            borderRadius: 3,
+            boxShadow: 24,
+            p: 4,
+          }}
+        >
+          <Typography variant="h5" fontWeight="bold" gutterBottom>
+            Create New Group
+          </Typography>
+          <form onSubmit={handleCreateGroup}>
+            <TextField
+              label="Group Name *"
+              fullWidth
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              sx={{ mb: 2 }}
+              required
+            />
+            <TextField
+              label="Description (Optional)"
+              multiline
+              rows={3}
+              fullWidth
+              value={groupDescription}
+              onChange={(e) => setGroupDescription(e.target.value)}
+              sx={{ mb: 3 }}
+            />
+            <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
+              <Button onClick={closeGroupModal} variant="outlined">
+                Cancel
+              </Button>
+              <Button type="submit" variant="contained" disabled={groupsLoading}>
+                Create Group
+              </Button>
+            </Box>
+          </form>
+        </Box>
+      </Modal>
 
       {/* Snackbar for notifications */}
       <Snackbar

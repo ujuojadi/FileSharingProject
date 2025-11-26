@@ -334,6 +334,8 @@ export const groups = {
     list: () => api.get('/groups'),
     getOne: (id) => api.get(`/groups/${id}`),
     join: (groupId) => api.post(`/groups/${groupId}/join`),
+    getMyGroups: () => api.get('/groups/me'),
+    getMemberCount: (groupId) => api.get(`/groups/${groupId}/members/count`),
     getRecommendations: (groupId) => api.get(`/groups/${groupId}/recommendations`),
 };
 

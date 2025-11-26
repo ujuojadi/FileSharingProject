@@ -15,8 +15,11 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 
 @router.post("/", response_model=Group, status_code=201)
 async def create_group(data: GroupCreate, groups_repo: GroupsRepository = Depends(get_groups_repo), current_user: User = Depends(get_current_verified_user)) -> Group:
-    # current_user not used, but ensures only verified users can create
-    return await groups_repo.create(data)
+    # Create the group
+    group = await groups_repo.create(data)
+    # Automatically add creator as a member
+    await groups_repo.join(group.id, current_user.id)
+    return group
 
 
 @router.post("/{group_id}/join", response_model=GroupMembership)
@@ -28,6 +31,53 @@ async def join_group(group_id: UUID, groups_repo: GroupsRepository = Depends(get
 @router.get("/", response_model=list[Group])
 async def list_groups(groups_repo: GroupsRepository = Depends(get_groups_repo)) -> list[Group]:
     return await groups_repo.list_groups()
+
+
+@router.get("/me", response_model=list[Group])
+async def get_my_groups(
+    groups_repo: GroupsRepository = Depends(get_groups_repo),
+    current_user: User = Depends(get_current_verified_user),
+) -> list[Group]:
+    """Get all groups the current user is a member of"""
+    all_groups = await groups_repo.list_groups()
+    # Check membership via internal structure (in-memory) or via members() method
+    my_groups = []
+    if hasattr(groups_repo, "_members_by_group"):
+        # In-memory repo
+        members_by_group = getattr(groups_repo, "_members_by_group")
+        for group in all_groups:
+            if current_user.id in members_by_group.get(group.id, []):
+                my_groups.append(group)
+    else:
+        # SQL repo - check membership via members() method
+        for group in all_groups:
+            try:
+                members = await groups_repo.members(group.id)
+                if any(m.id == current_user.id for m in members):
+                    my_groups.append(group)
+            except Exception:
+                continue
+    return my_groups
+
+
+@router.get("/{group_id}/members/count", response_model=dict)
+async def get_group_member_count(
+    group_id: UUID,
+    groups_repo: GroupsRepository = Depends(get_groups_repo),
+) -> dict:
+    """Get the number of members in a group"""
+    if hasattr(groups_repo, "_members_by_group"):
+        # In-memory repo
+        members_by_group = getattr(groups_repo, "_members_by_group")
+        count = len(members_by_group.get(group_id, []))
+    else:
+        # SQL repo
+        try:
+            members = await groups_repo.members(group_id)
+            count = len(members)
+        except Exception:
+            count = 0
+    return {"group_id": str(group_id), "member_count": count}
 
 
 @router.get("/{group_id}/recommendations", response_model=list[FileMeta])
