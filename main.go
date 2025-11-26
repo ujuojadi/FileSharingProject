@@ -294,6 +294,7 @@
 package main
 
 import (
+    "bytes"
     "crypto/sha256"
      "github.com/ujuojadi/PersonalFileS/p2p"
 	 "log"
@@ -553,16 +554,46 @@ func indexFiles() ([]File, error) {
 
 
 
-// HTTP handler: list all files
-func listFilesHandler(w http.ResponseWriter, r *http.Request) {
-    files, err := indexFiles()
-    if err != nil {
-        http.Error(w, "Failed to scan files", http.StatusInternalServerError)
-        return
+// HTTP handler: handle /files endpoint (GET for list, POST for store by key)
+func fileHandler(s *FileServer) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        if r.Method == http.MethodGet {
+            // List files
+            files, err := indexFiles()
+            if err != nil {
+                http.Error(w, "Failed to scan files", http.StatusInternalServerError)
+                return
+            }
+            w.Header().Set("Content-Type", "application/json")
+            json.NewEncoder(w).Encode(files)
+        } else if r.Method == http.MethodPost {
+            // Store file by key (for P2P client)
+            key := r.URL.Query().Get("key")
+            if key == "" {
+                http.Error(w, "key parameter required", http.StatusBadRequest)
+                return
+            }
+            
+            // Read file content from request body
+            fileContent, err := io.ReadAll(r.Body)
+            if err != nil {
+                http.Error(w, "Failed to read file content: "+err.Error(), http.StatusBadRequest)
+                return
+            }
+            defer r.Body.Close()
+            
+            // Store file using the provided key
+            if err := s.Store(key, bytes.NewReader(fileContent)); err != nil {
+                http.Error(w, "Failed to store file: "+err.Error(), http.StatusInternalServerError)
+                return
+            }
+            
+            w.WriteHeader(http.StatusCreated)
+            w.Write([]byte("File stored successfully"))
+        } else {
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        }
     }
-
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(files)
 }
 
 // HTTP handler: download by ID
@@ -619,22 +650,25 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 
 
 func main() {
-    s1 := makeServer(":5000")           // no bootstrap nodes
-    s2 := makeServer(":50002", ":5000")  // bootstrap node s1
+    // Start single P2P server for development
+    s1 := makeServer(":5000")  // no bootstrap nodes
 
+    // Start P2P node in background
+    go func() { 
+        log.Println("Starting P2P server on :5000...")
+        if err := s1.Start(); err != nil {
+            log.Fatal(err)
+        }
+    }()
 
-    // Start both P2P nodes
-    go func() { log.Println("Starting s1..."); log.Fatal(s1.Start()) }()
-    go func() { log.Println("Starting s2..."); log.Fatal(s2.Start()) }()
-
-    time.Sleep(2 * time.Second) // wait for bootstrap
+    time.Sleep(1 * time.Second) // wait for P2P server to start
 
     // HTTP server for uploads
-    http.HandleFunc("/upload", uploadHandler(s2))
-     http.HandleFunc("/files", listFilesHandler)
+    http.HandleFunc("/upload", uploadHandler(s1))
+    http.HandleFunc("/files", fileHandler(s1))  // Handle both GET (list) and POST (store by key)
     http.HandleFunc("/files/download", downloadFileHandler)
 
-    fmt.Println("Upload server running on :8082")
+    fmt.Println("HTTP server running on :8080")
     log.Fatal(http.ListenAndServe(":8080", enableCORS(http.DefaultServeMux)))
 }
 

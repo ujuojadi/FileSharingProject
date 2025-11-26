@@ -300,20 +300,15 @@ export const files = {
     upload: (file, metadata = {}) => {
         const formData = new FormData();
         formData.append('file', file);
-        if (metadata.courseCode) formData.append('courseCode', metadata.courseCode);
-        if (metadata.courseName) formData.append('courseName', metadata.courseName);
+        // FastAPI expects snake_case field names
+        if (metadata.courseCode) formData.append('course_code', metadata.courseCode);
+        if (metadata.courseName) formData.append('course_name', metadata.courseName);
         if (metadata.description) formData.append('description', metadata.description);
         
-        // Update endpoint to match backend
-        // return api.post('/upload', formData, {
-        //     headers: {
-        //         'Content-Type': 'multipart/form-data',
-        //     },
-        // });
-
-        return axios.post('http://localhost:8080/upload', formData, {
+        // Use FastAPI endpoint - it handles P2P upload internally
+        return api.post('/files/upload', formData, {
             headers: {
-               'Content-Type': 'multipart/form-data',
+                'Content-Type': 'multipart/form-data',
             },
         });
     },

@@ -208,42 +208,50 @@ function Dashboard() {
 
 
 useEffect(() => {
-  const loadFilesFromGo = async () => {
+  const loadFiles = async () => {
     try {
-      const res = await fetch("http://localhost:8080/files");
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      setLoading(true);
+      // Load files from FastAPI backend
+      const response = await files.list();
+      const data = response.data;
       
-      const data = await res.json();
       if (!data || !Array.isArray(data)) {
         console.error("Files response is not an array:", data);
-        setNotes([]); // fallback to empty array
+        setNotes([]);
         return;
       }
 
+      // Map FastAPI FileMeta to frontend format
       const mappedFiles = data.map(file => ({
-        ID: file.ID || file.id,
-        name: file.Name || file.name || "Untitled",
-        size: file.Size || file.size || 0,
-        courseCode: file.CourseCode || file.courseCode || "",
-        courseName: file.CourseName || file.courseName || "",
+        id: file.id,
+        name: file.filename,
+        size: file.size_bytes,
+        courseCode: file.course_code || "",
+        courseName: file.course_name || "",
         description: file.description || "",
-        uploadedAt: new Date(file.uploadedAt || file.uploaded_at || Date.now()),
-        type: file.Type || file.type || "application/octet-stream",
-        fileId: file.ID || file.id,
+        uploadedAt: new Date(file.uploaded_at),
+        type: file.content_type || "application/octet-stream",
+        rating: "4.0",
+        fileId: file.id,
       }));
 
-      console.log("MAPPED NOTES:", mappedFiles);
+      console.log("Loaded files from FastAPI:", mappedFiles);
       setNotes(mappedFiles);
 
     } catch (err) {
-      console.error("Failed to load files from Go:", err);
-      setNotes([]); // fallback so map won't fail
+      console.error("Failed to load files:", err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.detail || "Failed to load files. Please try again.",
+        severity: "error"
+      });
+      setNotes([]);
     } finally {
       setLoading(false);
     }
   };
 
-  loadFilesFromGo(); // ✅ actually call the async function
+  loadFiles();
 }, []);
 
 
@@ -278,49 +286,26 @@ useEffect(() => {
   try {
     setLoading(true);
 
-    // 1️⃣ Upload to your existing backend (this stays the same)
+    // Upload to FastAPI - it handles P2P upload internally
     const response = await files.upload(file, {
       courseCode,
       courseName,
       description,
     });
 
-    // 2️⃣ ALSO upload raw file to Go P2P server
-    const formData = new FormData();
-    formData.append("file", file);
-
-    await fetch("http://localhost:8080/upload", {
-      method: "POST",
-      body: formData
-    });
- 
-
-    // 3️⃣ Add new note to UI (unchanged)
-    // const newNote = {
-    //   id: response.data.id,
-    //   name: response.data.filename,
-    //   size: response.data.size_bytes,
-    //   courseCode: response.data.course_code || "",
-    //   courseName: response.data.course_name || "",
-    //   description: response.data.description || "",
-    //   uploadedAt: new Date(response.data.uploaded_at),
-    //   type: response.data.content_type || "application/octet-stream",
-    //   rating: "4.0",
-    //   fileId: response.data.id,
-    // };
-       
-        const newNote = {
-  id: response.data.ID || response.data.id,
-  name: response.data.Name || response.data.name || "Untitled",
-  size: response.data.Size || response.data.size || 0,
-  courseCode: response.data.CourseCode || response.data.courseCode || "",
-  courseName: response.data.CourseName || response.data.courseName || "",
-  description: response.data.description || "",
-  uploadedAt: new Date(response.data.uploadedAt || response.data.uploaded_at || Date.now()),
-  type: response.data.type || "application/octet-stream",
-  rating: "4.0",
-  fileId: response.data.ID || response.data.id,
-};
+    // Map FastAPI response to frontend format
+    const newNote = {
+      id: response.data.id,
+      name: response.data.filename,
+      size: response.data.size_bytes,
+      courseCode: response.data.course_code || "",
+      courseName: response.data.course_name || "",
+      description: response.data.description || "",
+      uploadedAt: new Date(response.data.uploaded_at),
+      type: response.data.content_type || "application/octet-stream",
+      rating: "4.0",
+      fileId: response.data.id,
+    };
 
 
     setNotes((prev) => [newNote, ...prev]);

@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     uploads_dir: str = os.path.join(base_dir, "uploads")
     
     # P2P Backend
-    p2p_backend_url: str = "http://localhost:8081"
+    p2p_backend_url: str = "http://localhost:8080"
     
     # Database (async SQLAlchemy URL).
     # By default the project will attempt to use a local MySQL/MariaDB instance

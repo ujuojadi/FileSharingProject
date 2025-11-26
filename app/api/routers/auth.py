@@ -31,11 +31,14 @@ async def register(data: RegisterRequest, users_repo: UsersRepository = Depends(
         raise HTTPException(status_code=409, detail="Email already registered")
     try:
         user = await users_repo.create(data)
+        # Auto-verify users for development (skip email verification)
+        await users_repo.verify(user.id)
+        user.is_verified = True
     except ValueError as ex:
         # Likely a password/hash related error (e.g. bcrypt 72-byte limit)
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     # Simulate sending verification email (log/print)
-    print(f"[Email] Verification email sent to {user.email}")
+    print(f"[Email] Verification email sent to {user.email} (auto-verified for development)")
     return UserPublic.model_validate(user)
 
 
