@@ -650,25 +650,35 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 
 
 func main() {
-    // Start single P2P server for development
-    s1 := makeServer(":5000")  // no bootstrap nodes
+    // Start two P2P nodes for true P2P replication
+    s1 := makeServer(":5000")           // First node (no bootstrap)
+    s2 := makeServer(":50002", ":5000") // Second node (connects to s1)
 
-    // Start P2P node in background
+    // Start both P2P nodes in background
     go func() { 
-        log.Println("Starting P2P server on :5000...")
+        log.Println("Starting P2P node 1 on :5000...")
         if err := s1.Start(); err != nil {
             log.Fatal(err)
         }
     }()
+    
+    go func() { 
+        log.Println("Starting P2P node 2 on :50002 (bootstrap: :5000)...")
+        if err := s2.Start(); err != nil {
+            log.Fatal(err)
+        }
+    }()
 
-    time.Sleep(1 * time.Second) // wait for P2P server to start
+    time.Sleep(2 * time.Second) // wait for P2P nodes to start and connect
 
-    // HTTP server for uploads
-    http.HandleFunc("/upload", uploadHandler(s1))
-    http.HandleFunc("/files", fileHandler(s1))  // Handle both GET (list) and POST (store by key)
+    // HTTP server for uploads - use s2 as primary (it's connected to the network)
+    http.HandleFunc("/upload", uploadHandler(s2))
+    http.HandleFunc("/files", fileHandler(s2))  // Handle both GET (list) and POST (store by key)
     http.HandleFunc("/files/download", downloadFileHandler)
 
     fmt.Println("HTTP server running on :8080")
+    fmt.Println("P2P Network: Node 1 on :5000, Node 2 on :50002")
+    fmt.Println("Files will be replicated across both nodes!")
     log.Fatal(http.ListenAndServe(":8080", enableCORS(http.DefaultServeMux)))
 }
 
