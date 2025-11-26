@@ -10,7 +10,7 @@ import {
   Link,
   Alert,
 } from "@mui/material";
-import { auth, setToken } from "../api";
+import api, { auth, setToken } from "../api";
 
 function Register() {
   const navigate = useNavigate();
@@ -35,11 +35,11 @@ function Register() {
     setIsLoading(true);
     
     try {
-      // First check if the server is reachable
+      // First check if the server is reachable via configured API base URL
       try {
-        await fetch('http://localhost:8000/health');
+        await api.get('/health');
       } catch (e) {
-        throw new Error('Server is not running. Please start the backend server first.');
+        throw new Error('Server is not running or unreachable from this frontend. Please check REACT_APP_API_URL and backend status.');
       }
 
       // Backend `UserCreate` schema expects `full_name`, so map `name` -> `full_name`
