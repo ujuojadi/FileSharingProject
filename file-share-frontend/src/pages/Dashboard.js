@@ -54,6 +54,8 @@ function Dashboard() {
   // Notes state
   const [notes, setNotes] = useState([]); // all notes uploaded by the user (local)
   const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = no results, [items] = results
+  const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState("date");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -255,6 +257,52 @@ useEffect(() => {
   loadFiles();
 }, []);
 
+  // Debounced search effect - calls backend API
+  useEffect(() => {
+    // If search is empty, clear search results and show all files
+    if (!search.trim()) {
+      setSearchResults(null);
+      setSearchLoading(false);
+      return;
+    }
+
+    // Debounce search API call
+    const timeoutId = setTimeout(async () => {
+      try {
+        setSearchLoading(true);
+        const response = await files.search({ q: search.trim() });
+        
+        // Map FastAPI FileMeta to frontend format
+        const mappedResults = response.data.map(file => ({
+          id: file.id,
+          name: file.filename,
+          size: file.size_bytes,
+          courseCode: file.course_code || "",
+          courseName: file.course_name || "",
+          description: file.description || "",
+          uploadedAt: new Date(file.uploaded_at),
+          type: file.content_type || "application/octet-stream",
+          rating: "4.0",
+          fileId: file.id,
+        }));
+        
+        setSearchResults(mappedResults);
+      } catch (err) {
+        console.error("Search failed:", err);
+        setSnackbar({
+          open: true,
+          message: err.response?.data?.detail || "Search failed. Please try again.",
+          severity: "error"
+        });
+        setSearchResults([]); // Show empty results on error
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [search]);
+
 
 
   // Tab handlers
@@ -344,15 +392,11 @@ useEffect(() => {
   //     return 0;
   //   });
 
-  const filtered = notes
-  .filter((n) => {
-    const name = (n.name || "").toLowerCase();
-    const code = (n.courseCode || "").toLowerCase();
-    const term = search.toLowerCase();
+  // Get data to display: search results if searching, otherwise all notes
+  const dataToDisplay = searchResults !== null ? searchResults : notes;
 
-    return name.includes(term) || code.includes(term);
-  })
-  .sort((a, b) => {
+  // Sort the data
+  const filtered = dataToDisplay.sort((a, b) => {
     if (sortBy === "name") return a.name.localeCompare(b.name);
     if (sortBy === "size") return a.size - b.size;
     if (sortBy === "date") return b.uploadedAt - a.uploadedAt;
@@ -618,7 +662,11 @@ const handleDelete = async (note) => {
             align="center"
             sx={{ width: "100%", mt: 4 }}
           >
-            No matching notes found.
+            {searchResults !== null 
+              ? search.trim() 
+                ? "No files found matching your search." 
+                : "No files found."
+              : "No files uploaded yet. Click 'Upload Note' to get started!"}
           </Typography>
         )}
       </Grid>
@@ -674,35 +722,48 @@ const handleDelete = async (note) => {
             Welcome back, Student 👋
           </Typography>
 
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 2,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <Paper
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                width: 400,
-                borderRadius: 3,
-                px: 2,
-              }}
-            >
-              <SearchIcon sx={{ color: "text.secondary" }} />
-              <TextField
-                variant="standard"
-                placeholder="Search notes..."
-                fullWidth
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                InputProps={{ disableUnderline: true }}
-                sx={{ ml: 1 }}
-              />
-            </Paper>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  gap: 2,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <Paper
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    width: 400,
+                    borderRadius: 3,
+                    px: 2,
+                    position: "relative", // For LinearProgress positioning
+                  }}
+                >
+                  <SearchIcon sx={{ color: "text.secondary" }} />
+                  <TextField
+                    variant="standard"
+                    placeholder="Search notes..."
+                    fullWidth
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    InputProps={{ disableUnderline: true }}
+                    sx={{ ml: 1 }}
+                    disabled={searchLoading}
+                  />
+                  {searchLoading && (
+                    <LinearProgress
+                      sx={{
+                        position: "absolute",
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: 2,
+                      }}
+                    />
+                  )}
+                </Paper>
 
             <FormControl
               size="small"
