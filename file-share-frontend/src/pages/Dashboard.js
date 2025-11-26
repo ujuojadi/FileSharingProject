@@ -254,6 +254,7 @@ useEffect(() => {
         type: file.content_type || "application/octet-stream",
         rating: "4.0",
         fileId: file.id,
+        uploaderId: file.uploader_id, // Preserve uploader_id for filtering
       }));
 
       console.log("Loaded files from FastAPI:", mappedFiles);
@@ -302,6 +303,7 @@ useEffect(() => {
           type: file.content_type || "application/octet-stream",
           rating: "4.0",
           fileId: file.id,
+          uploaderId: file.uploader_id, // Preserve uploader_id for filtering
         }));
         
         setSearchResults(mappedResults);
@@ -372,6 +374,7 @@ useEffect(() => {
       type: response.data.content_type || "application/octet-stream",
       rating: "4.0",
       fileId: response.data.id,
+      uploaderId: response.data.uploader_id, // Preserve uploader_id for filtering
     };
 
 
@@ -411,7 +414,21 @@ useEffect(() => {
   //   });
 
   // Get data to display: search results if searching, otherwise all notes
-  const dataToDisplay = searchResults !== null ? searchResults : notes;
+  let dataToDisplay = searchResults !== null ? searchResults : notes;
+
+  // Filter by tab
+  if (tab === 1 && user) {
+    // "My Uploads" tab - filter by current user
+    // Note: We need to check if files have uploader_id in the mapped format
+    // Since we're mapping from FileMeta, we need to preserve uploader_id
+    dataToDisplay = dataToDisplay.filter((file) => {
+      // Check if file has uploaderId or uploader_id field
+      const fileUploaderId = file.uploaderId || file.uploader_id;
+      return fileUploaderId === user.id;
+    });
+  }
+  // Tab 0 (All Notes) and Tab 3 (Top Rated) show all files
+  // Tab 2 (Groups) will be handled separately
 
   // Sort the data
   const filtered = dataToDisplay.sort((a, b) => {
