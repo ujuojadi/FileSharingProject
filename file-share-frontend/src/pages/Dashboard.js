@@ -210,6 +210,24 @@ function Dashboard() {
 
 
 
+// Load user profile on mount
+useEffect(() => {
+  const loadUser = async () => {
+    try {
+      const response = await users.getProfile();
+      setUser(response.data);
+      console.log("Loaded user profile:", response.data);
+    } catch (err) {
+      console.error("Failed to load user profile:", err);
+      // Don't show error to user, just log it
+      // User can still use the app without profile loaded
+    }
+  };
+
+  loadUser();
+}, []);
+
+// Load files on mount
 useEffect(() => {
   const loadFiles = async () => {
     try {
@@ -719,7 +737,7 @@ const handleDelete = async (note) => {
         {/* search + sort */}
         <Box sx={{ textAlign: "center", mb: 4 }}>
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Welcome back, Student 👋
+            Welcome back, {user?.full_name || "Student"} 👋
           </Typography>
 
               <Box
