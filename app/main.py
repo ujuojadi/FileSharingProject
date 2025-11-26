@@ -7,13 +7,15 @@ from app.api import api_router
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
 
-# Simple CORS; adjust origins as needed
+# CORS configuration - must be added BEFORE other middleware
+# For development, allow all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_allow_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=False,  # Can't use True with "*" origins
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"],  # Expose all headers
 )
 
 UPLOAD_DIR = settings.uploads_dir

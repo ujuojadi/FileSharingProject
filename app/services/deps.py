@@ -14,11 +14,14 @@ settings = get_settings()
 
 # Singletons for process lifetime (in-memory)
 _users_repo: object
-if settings.database_url:
-    # use SQL-backed repository by default (sqlite for local dev)
-    _users_repo = SQLUsersRepository()
-else:
-    _users_repo = InMemoryUsersRepository()
+# For now, use in-memory repository to avoid database setup issues
+# TODO: Switch to SQL repository once database is properly configured
+_users_repo = InMemoryUsersRepository()
+# Uncomment below to use SQL repository when database is ready:
+# if settings.database_url and not settings.database_url.startswith("mysql"):
+#     _users_repo = SQLUsersRepository()
+# else:
+#     _users_repo = InMemoryUsersRepository()
 _files_repo = InMemoryFilesRepository()
 _feedback_repo = InMemoryFeedbackRepository()
 _groups_repo = InMemoryGroupsRepository()

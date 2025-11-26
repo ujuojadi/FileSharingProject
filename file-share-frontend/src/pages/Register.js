@@ -15,7 +15,7 @@ import { auth } from "../api";
 function Register() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    name: "",
+    full_name: "",
     email: "",
     password: "",
   });
@@ -35,13 +35,6 @@ function Register() {
     setIsLoading(true);
     
     try {
-      // First check if the server is reachable
-      try {
-        await fetch('http://localhost:8000/health');
-      } catch (e) {
-        throw new Error('Server is not running. Please start the backend server first.');
-      }
-
       const regRes = await auth.register(formData);
       // Registration succeeded on server
       console.log('Registration response', regRes.status, regRes.data);
@@ -111,8 +104,14 @@ function Register() {
             setError(detail || "Registration failed. Please try again later.");
         }
       } else if (error.isAxiosError && !error.response) {
-        // Network error
-        setError("Cannot connect to the server. Please check that the backend is running at http://localhost:8000");
+        // Network error - could be CORS or server not reachable
+        console.error("Network error:", error);
+        console.error("Error details:", {
+          message: error.message,
+          code: error.code,
+          config: error.config
+        });
+        setError("Cannot connect to the server. Please check that the backend is running at http://localhost:8000. Check browser console for details.");
       } else {
         // Unexpected error
         setError(error.message || "An unexpected error occurred. Please try again.");
@@ -151,10 +150,10 @@ function Register() {
           <TextField
             fullWidth
             label="Name"
-            name="name"
+            name="full_name"
             margin="normal"
             variant="outlined"
-            value={formData.name}
+            value={formData.full_name}
             onChange={handleChange}
             required
           />
