@@ -39,3 +39,5 @@ __pycache__/
 *.pyo
 startTunnel.sh
 "_*_network/" 
+_5000_network/ 
+_50002_network/ 
